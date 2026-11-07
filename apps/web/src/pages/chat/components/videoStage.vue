@@ -6,6 +6,8 @@ import { useMatrixChat } from "@/composables/useMatrixChat";
 // ACT: 播放/暂停字形取自 src/icons 的描边 SVG（与画笔工具箱同 1.9 描边），经 mask + currentColor 着色。
 import iconVideoPlay from "@/icons/video_play.svg";
 import iconVideoPause from "@/icons/video_pause.svg";
+// ACT: 无视频空态插画改用胶片图标：经 mask + 分隔线同色渲染，宽度仍为 el-empty 默认 160px。
+import iconEmptyFilm from "@/icons/canvas_film.svg";
 
 // ACT: 群聊页左侧「视频播放与截图」舞台：播放器 + 自定义控制条 + 画笔工具箱。
 // 画笔层移植自 mesh-controller-codegen 的 MeshViewer：标记以归一化坐标存储（0..1），
@@ -321,8 +323,8 @@ onBeforeUnmount(() => {
   <section class="stage">
     <div class="stageBoxWrap">
       <!-- ACT: 盒子按视频原生宽高比撑开（object-fit 无需 letterbox），画笔层与视频内容完全重合。 -->
-      <!-- ACT: 无视频时保留 16:9 占位盒与控制条/画笔工具箱，仅按钮置灰，布局不随内容跳变。 -->
-      <div ref="boxRef" class="stageBox" :class="{ empty: !current }" :style="{ aspectRatio: `${aspect}` }">
+      <!-- ACT: 无视频时不锁宽高比：占位盒高度随空态内容撑开，胶片图与文案完整可见不被裁切。 -->
+      <div ref="boxRef" class="stageBox" :class="{ empty: !current }" :style="current ? { aspectRatio: `${aspect}` } : null">
         <video
           v-if="current"
           ref="videoRef"
@@ -333,7 +335,12 @@ onBeforeUnmount(() => {
           @play="playing = true"
           @pause="playing = false"
           @ended="playing = false" />
-        <el-empty v-else :description="translate('该群聊还没有视频')" />
+        <el-empty v-else :description="translate('该群聊还没有视频')">
+          <template #image>
+            <!-- ACT: 胶片空态图：mask 渲染 SVG 并以分隔线同色着色；宽 160px 不变，高按固有比例撑开不裁切。 -->
+            <span class="filmPic" :style="{ '--tool-icon': `url(&quot;${iconEmptyFilm}&quot;)` }" aria-hidden="true" />
+          </template>
+        </el-empty>
         <canvas
           ref="inkRef"
           class="ink"
@@ -486,6 +493,23 @@ onBeforeUnmount(() => {
   }
 
   :deep(.el-empty) { padding: 24px 0; }
+
+  // ACT: 胶片空态图字形：mask + currentColor 同款技法，颜色取竖直分隔线同色 --el-border-color；
+  // 宽度撑满 .el-empty__image 的 160px，高度按 SVG 固有比例（1392/1024）展开，整图可见。
+  .filmPic {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1392 / 1024;
+    background-color: var(--el-border-color);
+    mask-image: var(--tool-icon);
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+    -webkit-mask-image: var(--tool-icon);
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+  }
 
   video {
     display: block;

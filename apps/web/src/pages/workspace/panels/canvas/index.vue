@@ -60,7 +60,6 @@
           :error="nodeErrors[type]"
           :loading="nodeLoads.has(type) || (nodeListLoading && !nodeTypes[type] && !nodeErrors[type])" />
       </template>
-      <background v-if="canvasId" :gap="16" patternColor="var(--el-border-color)" />
       <div v-if="!canvasId" class="canvasOverlay" role="status" @contextmenu.prevent @dragover.prevent @drop.prevent>
         从左上角打开一个画布，就可以开始创作啦
       </div>
@@ -71,9 +70,6 @@
       <canvasMenu ref="canvasMenuRef" v-model:canvasId="canvasId" :directory="project?.directory" :initialCanvasId="initialCanvasId" :activateCanvas="activateCanvas" :flushSave="flushCanvases ?? flushCanvasSave">
         <assetLibrary ref="assetLibraryRef" v-model="assetsVisible" :directory="project?.directory" />
       </canvasMenu>
-      <canvasControls
-        v-if="canvasId"
-        v-model:assetsVisible="assetsVisible" />
       <nodeMenu
         :key="JSON.stringify(['nodeMenu', project?.directory, canvasId])"
         ref="nodeMenuRef"
@@ -152,7 +148,6 @@ import {
   type NodeTypesObject,
   type XYPosition,
 } from "@vue-flow/core";
-import { Background } from "@vue-flow/background";
 import { useCanvasTools } from "./useCanvasTools";
 import type { CanvasContext } from "@toonflow/tool-canvas/runtime";
 import { loadNodeComponent } from "./loadNodeComponent";
@@ -163,7 +158,6 @@ import { readClipboardFiles, readClipboardText, writeClipboardImage } from "@/li
 import nodeMenu from "./components/nodeMenu.vue";
 import remoteNode from "./components/remoteNode.vue";
 import canvasMenu from "./components/canvasMenu.vue";
-import canvasControls from "./components/canvasControls.vue";
 import canvasEmpty from "./components/canvasEmpty.vue";
 import assetLibrary from "./components/assetLibrary.vue";
 import groupNode from "./components/groupNode.vue";
@@ -272,6 +266,12 @@ const { canUndo, canRedo } = canvasHistory;
 provide("batchCanvasHistory", canvasHistory.batch);
 const getNodeTools = useNodeToolsContext();
 const { addNodes, addEdges, removeEdges, findEdge, findNode, toObject, viewport, screenToFlowCoordinate } = flow;
+// ACT: 素材库开关与缩放状态改由工作室页底部工具栏跨组件读写（原画布左下角 canvasControls 已并入该工具栏），
+// 这里集中提供只读状态与缩放动作，经 canvasHost 转发暴露。
+const zoomPercent = computed(() => Math.round(viewport.value.zoom * 100));
+function applyZoom(value: number | undefined) {
+  if (value !== undefined && Number.isFinite(value)) void flow.zoomTo(value / 100);
+}
 provide("copyNodeToClipboard", async (node: Parameters<typeof copyNodeToClipboard>[0]) => {
   const directory = project.value?.directory;
   if (!directory) throw new Error("请先选择工作目录");
@@ -408,6 +408,7 @@ function applyGraphSnapshot(graph: { nodes: unknown[]; edges: unknown[] }) {
   void nextTick(() => { suppressEditSignal = false; });
 }
 defineExpose({ canvasId, canvasReady, getCanvasContext, getGraphSnapshot, applyGraphSnapshot, localEditSignal, addNodeAtPointer, readDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, prepareCanvasDelete, flushSave: flushCanvasSave, cancelSave: cancelCanvasSave,
+  assetsVisible, zoomPercent, applyZoom, zoomIn: () => flow.zoomIn(), zoomOut: () => flow.zoomOut(),
   openNodeSearch: () => nodeSearchRef.value?.open(),
   getCanvases: (signal?: AbortSignal) => {
     if (!canvasMenuRef.value) throw new Error("画布菜单尚未就绪");
@@ -859,7 +860,7 @@ function canUseCanvasClipboard(event: Event) {
   const target = event.target;
   return props.active && !event.defaultPrevented && !props.settingsVisible && !!canvasId.value && !!project.value?.directory
     && target instanceof Element
-    && !target.closest("input, textarea, select, button, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider'], [role='dialog'], #agentPanel")
+    && !target.closest("input, textarea, select, button, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider'], [role='dialog'], .chatPanel")
     && (target === document.body || target === document.documentElement || canvasElement.value?.contains(target));
 }
 
@@ -1083,7 +1084,7 @@ function updateCanvasKeys(event: KeyboardEvent) {
   const shortcuts = generalSettings.value.canvasShortcuts;
   const inCanvas =
     target instanceof Element &&
-    !target.closest("[role='dialog'], #agentPanel") &&
+    !target.closest("[role='dialog'], .chatPanel") &&
     (target === document.body || target === document.documentElement || canvasElement.value?.contains(target));
   // None 只配置默认鼠标手势，不能触发会禁用节点交互的临时抓手或节点内部缩放。
   zoomKeyPressed.value = !event.isComposing && shortcutPressed(event, getShortcutBindings(shortcuts.zoom).filter(binding => binding !== "None").join(" / "), pressedCodes);
@@ -1327,6 +1328,10 @@ const defaultEdgeOptions = markRaw({
 .canvas {
   width: 100%;
   height: 100%;
+  // ACT: 画布底色与点阵与 Chat 页舞台完全一致：同底色 + 16px 网格 1px 圆点（静态 CSS，不随缩放/平移变化）。
+  background-color: var(--el-bg-color);
+  background-image: radial-gradient(var(--el-border-color) 1px, transparent 1px);
+  background-size: 16px 16px;
 
   &.canvasUnselected :deep(.vue-flow__viewport) {
     visibility: hidden;

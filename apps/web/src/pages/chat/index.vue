@@ -116,13 +116,28 @@ onBeforeUnmount(onResizeUp);
   transform: translateX(-50%);
 }
 
-// ACT: 分隔条平时透明，悬停/拖拽时亮主色给出反馈。
+// ACT: 与 Studio 页分隔条一致：4px 命中区居中常显 1px 竖直分割线，悬停/拖拽时线亮主色。
 .chatResize {
+  position: relative;
   width: 4px;
   cursor: col-resize;
   background: transparent;
-  transition: background 0.15s ease;
 
-  &:hover, &.dragging { background: var(--el-color-primary); }
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+    background: var(--el-border-color);
+    transition: background 0.15s ease;
+  }
+
+  &:hover,
+  &.dragging {
+    &::before { background: var(--el-color-primary); }
+  }
 }
 </style>

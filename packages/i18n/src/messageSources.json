@@ -39,8 +39,7 @@
     "apps/web/src/components/modelPopover.vue",
     "apps/web/src/components/loginDialog.vue",
     "apps/web/src/pages/workspace/panels/document/components/editorTab.vue",
-    "apps/web/src/pages/workspace/panels/document/components/workspaceSearch.vue",
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
+    "apps/web/src/pages/workspace/panels/document/components/workspaceSearch.vue"
   ],
   "视频加载失败": [
     "apps/web/src/components/videoPlayer.vue"
@@ -3762,8 +3761,7 @@
     "apps/web/src/components/settings/panels/about.vue"
   ],
   "vidsay 是为爱发电的开源项目。欢迎文明交流、友善反馈；回复可能需要一些时间，请避免责问或命令式沟通，感谢你的理解与尊重。": [
-    "apps/web/src/components/settings/panels/about.vue",
-    "apps/web/src/pages/workspace/index.vue"
+    "apps/web/src/components/settings/panels/about.vue"
   ],
   "赞助商": [
     "apps/web/src/components/settings/panels/about.vue"
@@ -4818,13 +4816,13 @@
   ],
   "素材库": [
     "apps/web/src/pages/workspace/panels/canvas/components/assetLibrary.vue",
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue",
     "apps/web/src/pages/workspace/panels/canvas/components/assetBrowser.vue",
+    "apps/web/src/pages/workspace/index.vue",
     "apps/web/src/pages/home/assetLibraryDialog.vue"
   ],
   "关闭素材库": [
     "apps/web/src/pages/workspace/panels/canvas/components/assetLibrary.vue",
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
+    "apps/web/src/pages/workspace/index.vue"
   ],
   "文件夹名称": [
     "apps/web/src/pages/workspace/panels/canvas/components/assetLibrary.vue"
@@ -4875,28 +4873,6 @@
   ],
   "已保存到素材库": [
     "apps/web/src/pages/workspace/panels/canvas/components/assetLibrary.vue"
-  ],
-  "打开素材库": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "缩放菜单（滚轮调整缩放）": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "缩放菜单": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "缩放百分比": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "放大": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue",
-    "apps/web/src/lib/i18n.ts",
-    "apps/web/src/lib/canvasShortcuts.ts"
-  ],
-  "缩小": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue",
-    "apps/web/src/lib/i18n.ts",
-    "apps/web/src/lib/canvasShortcuts.ts"
   ],
   "连接分组节点": [
     "apps/web/src/pages/workspace/panels/canvas/components/selectionHandle.vue"
@@ -5164,8 +5140,7 @@
     "apps/web/src/pages/workspace/panels/canvas/components/canvasEmpty.vue"
   ],
   "视频生成": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasEmpty.vue",
-    "apps/web/src/pages/workspace/index.vue"
+    "apps/web/src/pages/workspace/panels/canvas/components/canvasEmpty.vue"
   ],
   "音频生成": [
     "apps/web/src/pages/workspace/panels/canvas/components/canvasEmpty.vue"
@@ -5513,26 +5488,8 @@
   "未知画布操作：{0}": [
     "apps/web/src/pages/workspace/panels/canvas/useCanvasTools.ts"
   ],
-  "AI 对话": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
-  ],
-  "群聊": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
-  ],
-  "切换为悬浮": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
-  ],
-  "停靠到右侧": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
-  ],
-  "从左侧调整对话宽度": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
-  ],
-  "从右侧调整对话宽度": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
-  ],
-  "从下方调整对话高度": [
-    "apps/web/src/pages/workspace/components/floatingAgent.vue"
+  "工作流同步": [
+    "apps/web/src/pages/workspace/index.vue"
   ],
   "切换到文档": [
     "apps/web/src/pages/workspace/index.vue"
@@ -5540,13 +5497,10 @@
   "切换到画布": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "一键生成视频": [
+  "文件样式": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "分步生成视频": [
-    "apps/web/src/pages/workspace/index.vue"
-  ],
-  "工作流同步": [
+  "画布样式": [
     "apps/web/src/pages/workspace/index.vue"
   ],
   "有未同步的本地改动，点击提交更新提案": [
@@ -5600,38 +5554,38 @@
   "画布工具": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "移动工具，点击切换为抓手": [
-    "apps/web/src/pages/workspace/index.vue"
-  ],
-  "抓手工具，点击切换为移动": [
-    "apps/web/src/pages/workspace/index.vue"
-  ],
-  "切换抓手/移动工具": [
-    "apps/web/src/pages/workspace/index.vue"
+  "分组节点": [
+    "apps/web/src/pages/workspace/index.vue",
+    "apps/web/src/lib/canvasShortcuts.ts"
   ],
   "搜索节点": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "帮助": [
+  "打开素材库": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "使用教程": [
+  "移动画布": [
+    "apps/web/src/pages/workspace/index.vue",
+    "apps/web/src/lib/canvasShortcuts.ts"
+  ],
+  "缩放菜单（滚轮调整缩放）": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "vidsay 需求/BUG反馈表": [
+  "缩放菜单": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "汇报 BUG": [
+  "缩放百分比": [
     "apps/web/src/pages/workspace/index.vue"
   ],
-  "加入交流群": [
-    "apps/web/src/pages/workspace/index.vue"
+  "放大": [
+    "apps/web/src/pages/workspace/index.vue",
+    "apps/web/src/lib/i18n.ts",
+    "apps/web/src/lib/canvasShortcuts.ts"
   ],
-  "商务合作": [
-    "apps/web/src/pages/workspace/index.vue"
-  ],
-  "{0}二维码": [
-    "apps/web/src/pages/workspace/index.vue"
+  "缩小": [
+    "apps/web/src/pages/workspace/index.vue",
+    "apps/web/src/lib/i18n.ts",
+    "apps/web/src/lib/canvasShortcuts.ts"
   ],
   "已按自动生成模式准备工作室": [
     "apps/web/src/pages/workspace/index.vue"
@@ -5655,9 +5609,6 @@
     "apps/web/src/pages/workspace/index.vue"
   ],
   "更新协作授权失败，请确认已登录且工作室已连接房间": [
-    "apps/web/src/pages/workspace/index.vue"
-  ],
-  "此联系方式仅用于商务合作接洽，不提供问题答疑。使用问题欢迎在交流群交流，需求与 BUG 可通过反馈表提交。感谢理解。": [
     "apps/web/src/pages/workspace/index.vue"
   ],
   "工作区已切换，本次调用已停止": [
@@ -6182,12 +6133,6 @@
     "apps/web/src/lib/canvasShortcuts.ts"
   ],
   "追加选择": [
-    "apps/web/src/lib/canvasShortcuts.ts"
-  ],
-  "移动": [
-    "apps/web/src/lib/canvasShortcuts.ts"
-  ],
-  "抓手工具": [
     "apps/web/src/lib/canvasShortcuts.ts"
   ],
   "复制到剪贴板": [

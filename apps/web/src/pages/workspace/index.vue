@@ -1,5 +1,5 @@
 <template>
-  <main class="workspacePage" :inert="workspaceStore.projectLoadingVisible" :style="{ '--agentWidth': `${agentVisible ? agentWidth : 0}px` }">
+  <main ref="workspaceEl" class="workspacePage" :inert="workspaceStore.projectLoadingVisible" :style="{ '--chat-w': `${chatWidth}px` }">
     <canvasPanel
       :key="workspaceStore.project?.directory"
       v-model:selectedTool="selectedTool"
@@ -12,6 +12,7 @@
     <keep-alive :key="workspaceStore.project?.directory" :max="1">
       <documentPanel
         v-if="activePanel === 'document'"
+        class="documentArea"
         :key="workspaceStore.project?.directory"
         :ref="setDocumentPanel"
         :readNode="readDocumentNode"
@@ -26,170 +27,154 @@
     </keep-alive>
     <div class="workspaceTools">
       <!-- ACT: 就地模式切换器（Task 4）：在 step-by-step（本页 /studio）与 one-shot（/chat）之间切换，带当前房间过去。
-           放在 .workspaceTools（宽 = 100% - --agentWidth）右上角，停靠态下也不会被侧边聊天框遮挡。 -->
+           放在 .workspaceTools（与画布同网格单元）右上角；聊天框为右侧独立网格列，不再遮挡画布。 -->
       <modeSwitcher class="modeSwitch" mode="step-by-step" />
-      <div class="bottomTools">
-        <!-- ACT: 画布/文档底部切换按钮（Task 2）：移除顶部 el-segmented 后，用底部单按钮在画布与文档之间来回切换。 -->
-        <el-card class="panelToggle" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
-          <el-tooltip :content="activePanel === 'canvas' ? '切换到文档' : '切换到画布'" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-            <el-button class="toggleButton" text :aria-label="activePanel === 'canvas' ? '切换到文档' : '切换到画布'" @click="togglePanel">
-              <component :is="activePanel === 'canvas' ? IconFileText : IconVector" :size="18" aria-hidden="true" />
-            </el-button>
-          </el-tooltip>
-        </el-card>
-        <!-- ACT: 主持人的生成入口（Task 6）：从聊天框移到工作室画布工具区，仅 step-by-step 且主持人可见。 -->
-        <el-card v-if="isHost && activeRoomId" class="generateMenu" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
-          <div class="generateMenuContent" role="group" :aria-label="translate('视频生成')">
-            <el-tooltip :content="translate('一键生成视频')" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="generateButton" :aria-label="translate('一键生成视频')" @click="startPipeline('auto')">
-                <span class="generateIcon" :style="{ '--tool-icon': `url(&quot;${iconOneShot}&quot;)` }" aria-hidden="true" />
-              </el-button>
+    </div>
+    <!-- ACT: 底部按钮条：独立网格行（第二行第一列），顶边 1px 描边即水平分割线；
+         画布/文档面板只占第一行，节点与连线视口到线为止，不会渲染到线下。 -->
+    <div class="studioBar">
+        <!-- ACT: 工作流同步控件（画布权威/冲突策略的入口）：本地改动为待处理覆盖层，
+             「更新」提交提案并自动发房间讨论消息，「同步」回滚到客服 Agent 已同意的最新版本，「恢复」重新应用被覆盖的改动。
+             画布/文档切换按钮并入本组最左侧（「更新」之前），图标右侧带目标样式名标签；
+             文档态本组同样完整显示（仅未连接房间时收起为切换按钮）。整组停靠在底部按钮条左侧。 -->
+        <el-card class="syncMenu" shadow="never" :bodyStyle="{ padding: '4px' }">
+          <div class="barRow" role="group" :aria-label="translate('工作流同步')">
+            <el-tooltip :content="activePanel === 'canvas' ? '切换到文档' : '切换到画布'" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <button type="button" class="barButton" :aria-label="activePanel === 'canvas' ? '切换到文档' : '切换到画布'" @click="togglePanel">
+                <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${activePanel === 'canvas' ? iconCanvasDocument : iconCanvasPalette}&quot;)` }" aria-hidden="true" />
+                <span class="barLabel">{{ activePanel === 'canvas' ? translate("文件样式") : translate("画布样式") }}</span>
+              </button>
             </el-tooltip>
-            <el-tooltip :content="translate('分步生成视频')" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="generateButton" :aria-label="translate('分步生成视频')" @click="startPipeline('step')">
-                <span class="generateIcon" :style="{ '--tool-icon': `url(&quot;${iconStepByStep}&quot;)` }" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
+            <template v-if="activeRoomId">
+              <el-tooltip :content="graphPending ? '有未同步的本地改动，点击提交更新提案' : '当前没有未同步的本地改动'" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+                <button type="button" class="barButton" :disabled="!graphPending" aria-label="更新工作流" @click="submitGraphUpdate">
+                  <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasUpdate}&quot;)` }" aria-hidden="true" />
+                  <span class="barLabel">更新</span>
+                  <span v-if="graphPending" class="pendingDot" aria-hidden="true" />
+                </button>
+              </el-tooltip>
+              <el-tooltip content="回滚到客服 Agent 已同意的最新版本" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+                <button type="button" class="barButton" aria-label="同步工作流" @click="syncGraphToCommitted">
+                  <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasSync}&quot;)` }" aria-hidden="true" />
+                  <span class="barLabel">同步</span>
+                </button>
+              </el-tooltip>
+              <el-tooltip v-if="graphCanReapply" content="重新应用上次被覆盖的本地改动" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+                <button type="button" class="barButton" aria-label="恢复本地改动" @click="reapplyProposal">
+                  <IconRestore :size="18" aria-hidden="true" />
+                  <span class="barLabel">恢复</span>
+                </button>
+              </el-tooltip>
+              <!-- ACT: 计划 Task 13 —— 协作授权：用户明确同意后，客服 Agent 才能驱动本机画布/节点与调用本机本地模型。授权按账号记账，随时可关。 -->
+              <el-popover trigger="click" placement="top-end" :width="300" popperClass="grantPopover">
+                <template #reference>
+                  <button type="button" class="barButton" aria-label="协作授权">
+                    <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasConsent}&quot;)` }" aria-hidden="true" />
+                    <span class="barLabel">授权</span>
+                  </button>
+                </template>
+                <div class="grantMenu">
+                  <p class="grantIntro">授权后，客服 Agent 才能在本房间驱动你的设备与调用你的本地模型。授权按账号记录，随时可关闭。</p>
+                  <label class="grantRow">
+                    <span class="grantLabel">允许驱动我的设备（画布/节点操作）</span>
+                    <el-switch :model-value="roomGrant.driveSpokes" :loading="roomGrantSaving" @change="value => updateGrant({ driveSpokes: !!value })" />
+                  </label>
+                  <label class="grantRow">
+                    <span class="grantLabel" :class="{ disabled: !hasLocalModel }">允许调用我的本地模型</span>
+                    <el-switch :model-value="roomGrant.invokeLocalModels" :disabled="!hasLocalModel" :loading="roomGrantSaving" @change="value => updateGrant({ invokeLocalModels: !!value })" />
+                  </label>
+                  <p v-if="!hasLocalModel" class="grantHint">尚未在「设置 → 本地模型」配置可用的本地模型。</p>
+                </div>
+              </el-popover>
+            </template>
           </div>
         </el-card>
-        <!-- ACT: 计划 Task 11 —— 工作流同步控件（画布权威/冲突策略的入口）：本地改动为待处理覆盖层，
-             「更新」提交提案并自动发房间讨论消息，「同步」回滚到客服 Agent 已同意的最新版本，「恢复」重新应用被覆盖的改动。 -->
-        <el-card v-if="activePanel === 'canvas' && activeRoomId" class="syncMenu" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
-          <div class="syncMenuContent" role="group" :aria-label="translate('工作流同步')">
-            <el-tooltip :content="graphPending ? '有未同步的本地改动，点击提交更新提案' : '当前没有未同步的本地改动'" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="syncButton pending" text type="primary" :disabled="!graphPending" aria-label="更新工作流" @click="submitGraphUpdate">
-                <IconUpload :size="16" aria-hidden="true" />
-                <span class="syncLabel">更新</span>
-                <span v-if="graphPending" class="pendingDot" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="回滚到客服 Agent 已同意的最新版本" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="syncButton" text aria-label="同步工作流" @click="syncGraphToCommitted">
-                <IconRefresh :size="16" aria-hidden="true" />
-                <span class="syncLabel">同步</span>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip v-if="graphCanReapply" content="重新应用上次被覆盖的本地改动" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="syncButton" text aria-label="恢复本地改动" @click="reapplyProposal">
-                <IconRestore :size="16" aria-hidden="true" />
-                <span class="syncLabel">恢复</span>
-              </el-button>
-            </el-tooltip>
-            <!-- ACT: 计划 Task 13 —— 协作授权：用户明确同意后，客服 Agent 才能驱动本机画布/节点与调用本机本地模型。授权按账号记账，随时可关。 -->
-            <el-popover trigger="click" placement="top-end" :width="300" popperClass="grantPopover">
-              <template #reference>
-                <el-button class="syncButton" text :type="roomGrant.driveSpokes || roomGrant.invokeLocalModels ? 'primary' : 'default'" aria-label="协作授权">
-                  <IconShieldLock :size="16" aria-hidden="true" />
-                  <span class="syncLabel">授权</span>
-                </el-button>
-              </template>
-              <div class="grantMenu">
-                <p class="grantIntro">授权后，客服 Agent 才能在本房间驱动你的设备与调用你的本地模型。授权按账号记录，随时可关闭。</p>
-                <label class="grantRow">
-                  <span class="grantLabel">允许驱动我的设备（画布/节点操作）</span>
-                  <el-switch :model-value="roomGrant.driveSpokes" :loading="roomGrantSaving" @change="value => updateGrant({ driveSpokes: !!value })" />
-                </label>
-                <label class="grantRow">
-                  <span class="grantLabel" :class="{ disabled: !hasLocalModel }">允许调用我的本地模型</span>
-                  <el-switch :model-value="roomGrant.invokeLocalModels" :disabled="!hasLocalModel" :loading="roomGrantSaving" @change="value => updateGrant({ invokeLocalModels: !!value })" />
-                </label>
-                <p v-if="!hasLocalModel" class="grantHint">尚未在「设置 → 本地模型」配置可用的本地模型。</p>
-              </div>
-            </el-popover>
-          </div>
-        </el-card>
-        <el-card v-if="activePanel === 'canvas'" class="toolMenu" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
-          <div class="toolMenuContent" role="toolbar" aria-label="画布工具">
+        <!-- ACT: 画布工具组，停靠在画布底部右侧；文档态隐藏。组内顺序：添加→分组→搜索→素材库→移动画布→缩放。 -->
+        <el-card v-if="activePanel === 'canvas'" class="toolMenu" shadow="never" :bodyStyle="{ padding: '4px' }">
+          <div class="barRow" role="toolbar" aria-label="画布工具">
             <el-tooltip content="添加节点" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="toolButton addNodeButton" :disabled="!canvasPanelRef?.canvasReady" aria-label="添加节点" aria-haspopup="menu" @click="canvasPanelRef?.addNodeAtPointer()">
-                <icon-plus :size="18" aria-hidden="true" />
-              </el-button>
+              <button type="button" class="barButton iconOnly" :disabled="!canvasPanelRef?.canvasReady" aria-label="添加节点" aria-haspopup="menu" @click="canvasPanelRef?.addNodeAtPointer()">
+                <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasAdd}&quot;)` }" aria-hidden="true" />
+              </button>
             </el-tooltip>
-            <el-tooltip :content="selectedTool === 'move' ? '移动工具，点击切换为抓手' : '抓手工具，点击切换为移动'" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button
-                class="toolButton"
-                text
-                :type="selectedTool === 'hand' ? 'primary' : 'default'"
-                :aria-pressed="selectedTool === 'hand'"
-                aria-label="切换抓手/移动工具"
-                @click="selectedTool = selectedTool === 'move' ? 'hand' : 'move'">
-                <component :is="selectedTool === 'move' ? IconPointer : IconHandStop" :size="18" aria-hidden="true" />
-              </el-button>
+            <!-- ACT: 原「移动/抓手」单按钮切换拆为两个独立按钮：分组节点（移动工具）与移动画布（抓手工具），各自高亮当前工具。 -->
+            <el-tooltip content="分组节点" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <button
+                type="button"
+                class="barButton iconOnly"
+                :aria-pressed="selectedTool === 'move'"
+                aria-label="分组节点"
+                @click="selectedTool = 'move'">
+                <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasGrouping}&quot;)` }" aria-hidden="true" />
+              </button>
             </el-tooltip>
             <el-tooltip content="搜索节点" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="toolButton" text :disabled="!canvasPanelRef?.canvasReady" aria-label="搜索节点" @click="canvasPanelRef?.openNodeSearch()">
-                <icon-search :size="18" aria-hidden="true" />
-              </el-button>
+              <button type="button" class="barButton iconOnly" :disabled="!canvasPanelRef?.canvasReady" aria-label="搜索节点" @click="canvasPanelRef?.openNodeSearch()">
+                <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasSearch}&quot;)` }" aria-hidden="true" />
+              </button>
             </el-tooltip>
-            <el-tooltip :showArrow="false" content="帮助" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="helpVisible">
-              <span class="toolTrigger">
-                <el-popover v-model:visible="helpVisible" trigger="click" placement="top-end" :width="196">
+            <el-tooltip :showArrow="false" :content="assetsVisible ? '关闭素材库' : '打开素材库'" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <button
+                type="button"
+                class="barButton iconOnly"
+                :aria-pressed="assetsVisible"
+                aria-label="素材库"
+                @click="assetsVisible = !assetsVisible">
+                <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasAsset}&quot;)` }" aria-hidden="true" />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="移动画布" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <button
+                type="button"
+                class="barButton iconOnly"
+                :aria-pressed="selectedTool === 'hand'"
+                aria-label="移动画布"
+                @click="selectedTool = 'hand'">
+                <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasMove}&quot;)` }" aria-hidden="true" />
+              </button>
+            </el-tooltip>
+            <el-tooltip :showArrow="false"
+              content="缩放菜单（滚轮调整缩放）"
+              placement="top"
+              :hideAfter="0"
+              :enterable="false"
+              :triggerKeys="[]"
+              :disabled="zoomMenuVisible">
+              <span class="zoomTrigger">
+                <el-popover v-model:visible="zoomMenuVisible" trigger="click" placement="top-end" :width="216">
                   <template #reference>
-                    <el-button class="toolButton" text aria-label="帮助">
-                      <icon-help :size="18" />
-                    </el-button>
+                    <button
+                      type="button"
+                      class="barButton zoomButton"
+                      aria-label="缩放菜单"
+                      @wheel.stop.prevent="$event.deltaY && applyZoom(Math.min(800, Math.max(20, zoomPercent - Math.sign($event.deltaY))))">
+                      {{ zoomPercent }}%
+                    </button>
                   </template>
-                  <div class="helpMenu">
-                    <el-button
-                      class="helpAction"
-                      tag="a"
-                      text
-                      :icon="IconBook"
-                      href="https://qcn7xdsqgc4z.feishu.cn/docx/RXFqdgR2Xo0dXZxGfd0cZCGgnwf"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      @click="helpVisible = false">
-                      使用教程
-                    </el-button>
-                    <el-button
-                      class="helpAction"
-                      tag="a"
-                      text
-                      :icon="IconBug"
-                      href="https://docs.qq.com/smartsheet/form/EmvmQBrmlPmr%2Fss_vsqk2v%2FvhiGzE?tab=ss_vsqk2v"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="vidsay 需求/BUG反馈表"
-                      @click="helpVisible = false">
-                      汇报 BUG
-                    </el-button>
-                    <el-button class="helpAction" text :icon="IconBrandWechat" @click="showContact('community')">加入交流群</el-button>
-                    <el-button class="helpAction" text :icon="IconBriefcase" @click="showContact('business')">商务合作</el-button>
+                  <div class="zoomMenu">
+                    <el-input-number
+                      class="zoomInput"
+                      :model-value="zoomPercent"
+                      :min="20"
+                      :max="800"
+                      :controls="false"
+                      aria-label="缩放百分比"
+                      @change="applyZoom">
+                      <template #suffix>%</template>
+                    </el-input-number>
+                    <button type="button" class="zoomAction" @click="zoomIn()">放大</button>
+                    <button type="button" class="zoomAction" @click="zoomOut()">缩小</button>
                   </div>
                 </el-popover>
               </span>
             </el-tooltip>
           </div>
         </el-card>
-        <el-tooltip v-if="!agentVisible" content="vidsay Agent" placement="top" :showArrow="false" :hideAfter="0">
-          <el-button
-            class="agentButton"
-            :class="{ standalone: activePanel !== 'canvas' }"
-            :aria-expanded="agentVisible"
-            aria-label="vidsay Agent"
-            aria-controls="agentPanel"
-            @click="agentVisible = !agentVisible">
-            <!-- ACT: data URI 内含单引号，url() 必须加引号包裹，否则整条 mask 声明无效。 -->
-            <span class="agentLogo" :style="{ maskImage: `url(&quot;${agentLogoUrl}&quot;)` }" aria-hidden="true" />
-          </el-button>
-        </el-tooltip>
-      </div>
     </div>
-    <floatingAgent v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
-    <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
-      <div class="contactContent">
-        <q-r-code
-          :value="contactInfo.url"
-          :size="192"
-          type="svg"
-          color="#000000"
-          bgColor="#ffffff"
-          borderless
-          role="img"
-          :aria-label="`${contactInfo.title}二维码`" />
-        <p class="contactTip">{{ contactInfo.tip }}</p>
-      </div>
-    </el-dialog>
+    <!-- ACT: 可拖拽竖直分隔条：按住左右移动实时改右列（聊天框）宽度，与 Chat 页同款；常显 1px 竖直分割线。 -->
+    <div class="chatResize" :class="{ dragging: resizing }" @pointerdown="onResizeDown" />
+    <!-- ACT: 与 Chat 页共用的房间时间线聊天框：作为网格第三列静态停靠在右侧（取代原悬浮 floatingAgent）。 -->
+    <groupChat class="studioChat" mode="step-by-step" />
   </main>
 </template>
 
@@ -198,9 +183,8 @@ import { locale, translate } from "@toonflow/i18n/vue";
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { onBeforeRouteLeave, useRoute } from "vue-router";
 import axios from "axios";
-import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconUpload, IconRefresh, IconRestore, IconShieldLock } from "@tabler/icons-vue";
+import { IconRestore } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { QRCode } from "tdesign-vue-next";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useAuthStore } from "@/stores/auth";
 import { registerWorkspaceControl, waitForControlValue } from "@/lib/mcpControl";
@@ -213,13 +197,19 @@ import { loadRoomGrants, roomGrant, roomGrantSaving, saveRoomGrant } from "@/sto
 import { localModelConfig } from "@/stores/localModels";
 import canvasPanel from "./panels/canvas/canvasHost.vue";
 import type { DocumentNodeOptions } from "./panels/canvas/canvasFiles";
-import floatingAgent from "./components/floatingAgent.vue";
 import modeSwitcher from "@/components/modeSwitcher.vue";
-// ACT: 收起态画布底部按钮的图标改用客服图标（与助手欢迎语头像一致）。
-import agentLogoUrl from "@/icons/customer_service.svg";
-// ACT: 主持人生成入口图标（Task 6，自聊天框迁入工作室画布工具区）。
-import iconOneShot from "@/icons/generator_one_shot.svg";
-import iconStepByStep from "@/icons/generator_step_by_step.svg";
+import groupChat from "@/components/groupChat.vue";
+// ACT: 画布底部工具栏按钮图标改用本地 svg，经 mask 渲染以跟随按钮文字颜色（与聊天页主面板底部按钮同色同规格）。
+import iconCanvasAdd from "@/icons/canvas_add.svg";
+import iconCanvasGrouping from "@/icons/canvas_grouping.svg";
+import iconCanvasMove from "@/icons/canvas_move.svg";
+import iconCanvasSearch from "@/icons/canvas_search.svg";
+import iconCanvasAsset from "@/icons/canvas_asset.svg";
+import iconCanvasDocument from "@/icons/canvas_document.svg";
+import iconCanvasPalette from "@/icons/canvas_palette.svg";
+import iconCanvasUpdate from "@/icons/canvas_update.svg";
+import iconCanvasSync from "@/icons/canvas_sync.svg";
+import iconCanvasConsent from "@/icons/canvas_consent.svg";
 
 const documentPanel = defineAsyncComponent(() => import("./panels/document/index.vue"));
 
@@ -230,18 +220,49 @@ const sideButtonEvents = ["mousedown", "mouseup", "auxclick"] as const;
 function preventSideButtonNavigation(event: MouseEvent) {
   if (event.button === 3 || event.button === 4) event.preventDefault();
 }
+// ACT: 与 Chat 页一致的停靠式聊天框分栏：右列宽度由可拖拽分隔条实时调整，夹紧到 [320, 55vw]；
+// 默认取主面板宽度的 1/3（挂载时按实际容器宽度计算一次），拖拽后以拖拽值为准。聊天框常开，不提供收起开关。
+const CHAT_MIN = 320;
+const workspaceEl = ref<HTMLElement>();
+const chatWidth = ref(400);
+const resizing = ref(false);
+function applyDefaultChatWidth() {
+  const panel = workspaceEl.value?.clientWidth ?? 0;
+  if (!panel) return;
+  const max = Math.round(window.innerWidth * 0.55);
+  chatWidth.value = Math.min(max, Math.max(CHAT_MIN, Math.round(panel / 3)));
+}
+function onResizeDown(event: PointerEvent) {
+  event.preventDefault();
+  resizing.value = true;
+  document.addEventListener("pointermove", onResizeMove);
+  document.addEventListener("pointerup", onResizeUp);
+}
+function onResizeMove(event: PointerEvent) {
+  if (!resizing.value) return;
+  const max = Math.round(window.innerWidth * 0.55);
+  chatWidth.value = Math.min(max, Math.max(CHAT_MIN, window.innerWidth - event.clientX));
+}
+function onResizeUp() {
+  if (!resizing.value) return;
+  resizing.value = false;
+  document.removeEventListener("pointermove", onResizeMove);
+  document.removeEventListener("pointerup", onResizeUp);
+}
 onMounted(() => {
   anonymousData.track("workspace.canvas");
+  applyDefaultChatWidth();
   for (const eventName of sideButtonEvents) window.addEventListener(eventName, preventSideButtonNavigation, true);
 });
 onScopeDispose(() => {
+  onResizeUp();
   for (const eventName of sideButtonEvents) window.removeEventListener(eventName, preventSideButtonNavigation, true);
 });
 const workspaceStore = useWorkspaceStore();
 const auth = useAuthStore();
 const route = useRoute();
-// ACT: Matrix 房间状态（模块级单例）：activeRoomId 驱动辐条连接与生成入口，isHost 决定主持人专属控件可见性。
-const { activeRoomId, isHost, sendText } = useMatrixChat();
+// ACT: Matrix 房间状态（模块级单例）：activeRoomId 驱动辐条连接与生成入口。
+const { activeRoomId, sendText } = useMatrixChat();
 
 // ACT: 计划 Task 4 —— 从群聊主持人的「自动生成视频 / 分步生成视频」按钮跳转过来时，
 // 把生成意图与归属账号落到 workspace store，并标记当前项目的归属。
@@ -257,10 +278,6 @@ function seedPipelineFromQuery() {
   seedPipeline(mode, typeof route.query.room === "string" ? route.query.room : "");
 }
 watch(() => [route.query.mode, route.query.room], seedPipelineFromQuery, { immediate: true });
-// ACT: 计划 Task 6 —— 主持人在工作室画布工具区直接触发生成（聊天框已移除该入口，保持纯净）。
-function startPipeline(mode: "auto" | "step") {
-  seedPipeline(mode, activeRoomId.value);
-}
 
 // ACT: 计划 Task 11 —— 工作流同步动作：把本地待处理覆盖层提交为更新提案 / 回滚到已提交权威版本。
 async function submitGraphUpdate() {
@@ -317,30 +334,6 @@ async function updateGrant(patch: { driveSpokes?: boolean; invokeLocalModels?: b
 }
 
 useProviderBalances();
-const agentVisible = ref(true);
-const agentWidth = ref(0);
-const helpVisible = ref(false);
-const contactVisible = ref(false);
-const contactType = ref<"community" | "business">("community");
-const contacts = {
-  community: {
-    title: "加入交流群",
-    url: "https://work.weixin.qq.com/u/vc36adcc89845edcbe?v=5.0.3.63936&bb=85b8d228e8",
-    tip: "vidsay 是为爱发电的开源项目。欢迎文明交流、友善反馈；回复可能需要一些时间，请避免责问或命令式沟通，感谢你的理解与尊重。",
-  },
-  business: {
-    title: "商务合作",
-    url: "https://work.weixin.qq.com/u/vc0f54596c5837d05a?v=5.0.8.70675",
-    tip: "此联系方式仅用于商务合作接洽，不提供问题答疑。使用问题欢迎在交流群交流，需求与 BUG 可通过反馈表提交。感谢理解。",
-  },
-};
-const contactInfo = computed(() => contacts[contactType.value]);
-
-function showContact(type: "community" | "business") {
-  contactType.value = type;
-  helpVisible.value = false;
-  contactVisible.value = true;
-}
 const canvasPanelRef = ref<InstanceType<typeof canvasPanel>>();
 watch(() => canvasPanelRef.value?.canvasListReady, ready => {
   workspaceStore.projectLoading = !ready;
@@ -487,6 +480,17 @@ async function switchPanel(value: string | number | boolean) {
 // ACT: 底部单按钮切换（Task 2）：在画布与文档之间来回切换，替代原顶部 el-segmented。
 function togglePanel() { void switchPanel(activePanel.value === "canvas" ? "document" : "canvas"); }
 
+// ACT: 画布底部工具栏跨组件状态：素材库开关与缩放百分比/动作委托当前画布实例（原左下角 canvasControls 已并入本工具栏）。
+const zoomMenuVisible = ref(false);
+const assetsVisible = computed({
+  get: () => canvasPanelRef.value?.assetsVisible ?? false,
+  set: value => { if (canvasPanelRef.value) canvasPanelRef.value.assetsVisible = value; },
+});
+const zoomPercent = computed(() => canvasPanelRef.value?.zoomPercent ?? 100);
+function applyZoom(value: number | undefined) { canvasPanelRef.value?.applyZoom(value); }
+function zoomIn() { canvasPanelRef.value?.zoomIn(); }
+function zoomOut() { canvasPanelRef.value?.zoomOut(); }
+
 function readDocumentNode(directory: string, canvasPath: string, nodeId: string) {
   if (!canvasPanelRef.value) throw new Error("画布尚未就绪");
   return canvasPanelRef.value.readDocumentNode(directory, canvasPath, nodeId);
@@ -538,27 +542,30 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
 <style scoped lang="scss">
 .workspacePage {
   position: relative;
+  display: grid;
+  // ACT: 三列：画布/文档/工具叠加单元（弹性占满）+ 4px 分隔条 + 聊天框（宽度由拖拽变量 --chat-w 决定），与 Chat 页同构。
+  // 两行：第一行放面板与聊天框，第二行（57px）放底部按钮条，其顶边描边即水平分割线。
+  grid-template-columns: minmax(0, 1fr) 4px var(--chat-w, 400px);
+  grid-template-rows: minmax(0, 1fr) 57px;
   width: 100%;
   height: 100%;
   background-color: var(--el-bg-color);
 
   :deep(.canvasMenu),
   :deep(.balanceCard),
-  :deep(.canvasControlsCard),
-  .panelToggle,
   .toolMenu,
-  .syncMenu,
-  .generateMenu {
+  .syncMenu {
     background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
     backdrop-filter: blur(6px);
     border-color: var(--el-border-color-light);
     box-shadow: var(--el-box-shadow-light);
   }
 
+  // ACT: 画布、文档与工具叠加层共用网格第一单元（grid-area 1/1 重叠）；分隔条与聊天框各占第二/三列。
   .canvasPanel {
-    position: absolute;
-    inset: 0;
-    width: calc(100% - var(--agentWidth, 0px));
+    grid-area: 1 / 1;
+    min-width: 0;
+    min-height: 0;
     container: canvasWorkspace / inline-size;
 
     &.backgroundPanel {
@@ -568,310 +575,182 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
     }
   }
 
+  .documentArea {
+    grid-area: 1 / 1;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  // ACT: 可拖拽分隔条（第二列，跨两行）：4px 命中区居中常显 1px 竖直分割线，
+  // 让画布与聊天框的边界清晰可见；悬停/拖拽时线亮主色。
+  .chatResize {
+    grid-area: 1 / 2 / 3 / 3;
+    position: relative;
+    width: 4px;
+    cursor: col-resize;
+    background: transparent;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 1px;
+      transform: translateX(-50%);
+      background: var(--el-border-color);
+      transition: background 0.15s ease;
+    }
+
+    &:hover,
+    &.dragging {
+      &::before { background: var(--el-color-primary); }
+    }
+  }
+
+  // ACT: 停靠式聊天框（第三列，跨两行）：与 Chat 页共用 groupChat 组件，静态占位、不悬浮、不可收起。
+  .studioChat {
+    grid-area: 1 / 3 / 3 / 4;
+    min-width: 0;
+    min-height: 0;
+  }
+
   .workspaceTools {
-    position: absolute;
-    inset: 0;
-    width: calc(100% - var(--agentWidth, 0px));
+    grid-area: 1 / 1;
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    height: 100%;
     container: workspaceTools / inline-size;
     pointer-events: none;
 
+    // ACT: 切换器在画布列内水平居中（与 Chat 页在舞台上居中同款）：left 50% + translateX(-50%)。
+    // .workspaceTools 宽度即画布列宽，拖拽竖直分隔条改列宽时居中位置自动跟随。
     .modeSwitch {
       position: absolute;
       top: 15px;
-      right: 15px;
-      z-index: 5;
-      pointer-events: auto;
-    }
-
-    .bottomTools {
-      position: absolute;
-      bottom: 15px;
       left: 50%;
       z-index: 5;
-      display: flex;
-      align-items: center;
-      gap: 8px;
       transform: translateX(-50%);
       pointer-events: auto;
+    }
+  }
 
-      .panelToggle {
-        flex-shrink: 0;
-        transition: none;
+  // ACT: 底部按钮条（网格第二行第一列）：顶边 1px 描边即水平分割线，不透明底色保证
+  // 面板内容不会透到线下；画布/文档视口只占第一行，节点与连线不会渲染到线下。
+  .studioBar {
+    grid-area: 2 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 15px;
+    border-top: 1px solid var(--el-border-color);
+    background: var(--el-bg-color);
 
-        .toggleButton {
-          width: 28px;
-          height: 28px;
-          margin: 0;
-          padding: 0;
-        }
-      }
-
+      .syncMenu,
       .toolMenu {
         flex-shrink: 0;
         transition: none;
-
-        .toolMenuContent {
-          display: flex;
-          align-items: center;
-          gap: 2px;
-
-          .toolButton {
-            width: 28px;
-            height: 28px;
-            margin: 0;
-            padding: 0;
-
-            &.addNodeButton {
-              margin-right: 6px;
-              color: var(--el-bg-color);
-              background: var(--el-text-color-primary);
-              border-color: transparent;
-
-              &:hover { opacity: 0.85; }
-              &.is-disabled { opacity: 0.45; }
-            }
-          }
-
-          .toolTrigger { display: inline-flex; }
-
-          .el-divider { margin: 0; }
-        }
       }
 
-      .syncMenu {
-        flex-shrink: 0;
-        transition: none;
-
-        .syncMenuContent {
-          display: flex;
-          align-items: center;
-          gap: 2px;
-
-          .syncButton {
-            position: relative;
-            height: 28px;
-            margin: 0;
-            padding: 0 8px;
-            gap: 4px;
-
-            .syncLabel { font-size: 12px; line-height: 1; }
-
-            .pendingDot {
-              position: absolute;
-              top: 3px;
-              right: 3px;
-              width: 6px;
-              height: 6px;
-              border-radius: 50%;
-              background: var(--el-color-warning);
-            }
-          }
-        }
+      .barRow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
 
-      .generateMenu {
+      // ACT: 与聊天页主面板底部按钮同规格：32px 高、8px 圆角、--el-border-color 描边、透明底、primary 文字色图标；
+      // 选中态（.on）与聊天页 .on 一致：primary 描边 + primary-light-9 底 + primary 文字/图标色。
+      .barButton {
+        position: relative;
+        display: flex;
         flex-shrink: 0;
-        transition: none;
-
-        .generateMenuContent {
-          display: flex;
-          align-items: center;
-          gap: 2px;
-
-          .generateButton {
-            width: 28px;
-            height: 28px;
-            margin: 0;
-            padding: 0;
-          }
-
-          .generateIcon {
-            display: block;
-            flex-shrink: 0;
-            width: 18px;
-            height: 18px;
-            background-color: currentColor;
-            mask-image: var(--tool-icon);
-            mask-repeat: no-repeat;
-            mask-position: center;
-            mask-size: contain;
-            -webkit-mask-image: var(--tool-icon);
-            -webkit-mask-repeat: no-repeat;
-            -webkit-mask-position: center;
-            -webkit-mask-size: contain;
-          }
-        }
-      }
-
-      .agentButton {
-        position: absolute;
-        left: calc(100% + 8px);
-        width: 34px;
-        height: 34px;
-        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        height: 32px;
         margin: 0;
-        padding: 0;
-        border: 1px solid color-mix(in srgb, #6edfdc 30%, var(--el-border-color-light));
-        border-radius: 50%;
-        background: linear-gradient(145deg, color-mix(in srgb, #96f9f0 15%, var(--el-bg-color-overlay)), var(--el-bg-color-overlay) 65%,
-          color-mix(in srgb, #8588ff 18%, var(--el-bg-color-overlay)));
-        box-shadow: inset 0 1px 0 #ffffff52;
-        color: #f4fffe;
-        overflow: hidden;
-        isolation: isolate;
-        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+        padding: 0 10px;
+        gap: 6px;
+        border: 1px solid var(--el-border-color);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--el-text-color-primary);
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 
-        &.standalone {
-          position: relative;
-          left: auto;
-        }
+        &:hover:not(:disabled) { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+        &:disabled { opacity: 0.45; cursor: not-allowed; }
 
-        &::before,
-        &::after {
-          content: "";
+        &.iconOnly { width: 32px; padding: 0; }
+
+        .barLabel { font-size: 12px; line-height: 1; }
+
+        .pendingDot {
           position: absolute;
-          inset: 4px;
+          top: 3px;
+          right: 3px;
+          width: 6px;
+          height: 6px;
           border-radius: 50%;
-          pointer-events: none;
+          background: var(--el-color-warning);
         }
 
-        &::before {
-          z-index: -2;
-          background: radial-gradient(ellipse at 22% 15%, #adfff0, transparent 50%), radial-gradient(ellipse at 85% 85%, #b29aff, transparent 55%),
-            radial-gradient(ellipse at 85% 20%, #25dccc, transparent 50%), linear-gradient(150deg, #10aec1, #3765c6 60%, #765bd3);
-          animation: agentFlow 5.4s linear infinite;
-          filter: saturate(1.05);
-          transition: filter 180ms ease;
-        }
-
-        &::after {
-          z-index: -1;
-          background: radial-gradient(ellipse 12% 18% at 50% 50%, #ffffffa6, #d3fff773 35%, transparent 80%),
-            radial-gradient(ellipse at 32% 18%, #ffffff99, transparent 42%), radial-gradient(ellipse at 65% 95%, #17246070, transparent 65%);
-          background-size: 160% 160%, 100% 100%, 100% 100%;
-          background-position: 75% 85%, 0 0, 0 0;
-          background-repeat: no-repeat;
-          box-shadow: inset 0 0 0 1px #ffffff52, inset 0 2px 3px #ffffff80, inset 0 -3px 6px #16305b73;
-          animation: agentShine 3.2s linear infinite;
-        }
-
-        &:hover::before {
-          filter: saturate(1.2);
-        }
-
-        &:hover {
-          transform: translateY(-1px);
-          border-color: #87f2eb99;
-          box-shadow: inset 0 1px 0 #ffffff70;
-        }
-
-        &:active {
-          transform: scale(0.95);
-        }
-
-        &:focus-visible {
-          outline: 2px solid var(--el-color-primary);
-          outline-offset: 3px;
-        }
-
-        .agentLogo {
-          width: 24px;
-          height: 24px;
+        .toolIcon {
+          display: block;
           flex-shrink: 0;
-          background: currentColor;
-          mask-size: contain;
-          mask-position: center;
+          width: 18px;
+          height: 18px;
+          background-color: currentColor;
+          mask-image: var(--tool-icon);
           mask-repeat: no-repeat;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          transition: none;
-
-          &::before,
-          &::after {
-            animation: none;
-          }
+          mask-position: center;
+          mask-size: contain;
+          -webkit-mask-image: var(--tool-icon);
+          -webkit-mask-repeat: no-repeat;
+          -webkit-mask-position: center;
+          -webkit-mask-size: contain;
         }
       }
+
+    .zoomTrigger { display: inline-flex; }
+
+    .zoomButton {
+      min-width: 46px;
+      font-variant-numeric: tabular-nums;
     }
   }
 }
 
-@keyframes agentFlow {
-  from {
-    transform: rotate(0deg) scale(1);
-  }
-  25% {
-    transform: rotate(90deg) scale(1.06, 1.02);
-  }
-  50% {
-    transform: rotate(180deg) scale(1.02, 1.06);
-  }
-  75% {
-    transform: rotate(270deg) scale(1.05, 1.03);
-  }
-  to {
-    transform: rotate(360deg) scale(1);
-  }
-}
-
-@keyframes agentShine {
-  0%,
-  100% {
-    background-size: 160% 160%, 100% 100%, 100% 100%;
-    background-position: 75% 85%, 0 0, 0 0;
-  }
-  12.5% {
-    background-position: 40% 98%, 0 0, 0 0;
-  }
-  25% {
-    background-size: 180% 140%, 100% 100%, 100% 100%;
-    background-position: 10% 75%, 0 0, 0 0;
-  }
-  37.5% {
-    background-position: 2% 40%, 0 0, 0 0;
-  }
-  50% {
-    background-size: 160% 160%, 100% 100%, 100% 100%;
-    background-position: 25% 10%, 0 0, 0 0;
-  }
-  62.5% {
-    background-position: 60% 2%, 0 0, 0 0;
-  }
-  75% {
-    background-size: 140% 180%, 100% 100%, 100% 100%;
-    background-position: 95% 25%, 0 0, 0 0;
-  }
-  87.5% {
-    background-position: 98% 60%, 0 0, 0 0;
-  }
-}
-.helpMenu {
+// ACT: 缩放菜单渲染在 teleport 到 body 的 popover 内，作用域样式需置于根级（元素仍带本组件 data-v 属性）。
+.zoomMenu {
   display: flex;
   flex-direction: column;
   gap: 4px;
 
-  .helpAction {
-    justify-content: flex-start;
-    margin-left: 0;
+  .zoomInput {
+    width: 100%;
   }
-}
 
-.contactContent {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-
-  .contactTip {
+  .zoomAction {
     margin: 0;
-    color: var(--el-text-color-secondary);
+    padding: 5px 6px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--el-text-color-primary);
     font-size: 12px;
-    line-height: 1.7;
+    line-height: 1;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover { background: var(--el-fill-color); }
   }
 }
 
-/* ACT: 计划 Task 13 —— 协作授权弹层（内容被 teleport 到 popper，故用顶层选择器）。 */
 .grantMenu {
   display: flex;
   flex-direction: column;

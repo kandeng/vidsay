@@ -594,6 +594,13 @@ void props;
     :deep(.el-textarea) {
       flex: 1;
     }
+
+    // ACT: 输入框高度底线（1 行 = 1.5em 行高 + 上下 5px 内边距）：autosize 在个别页面挂载
+    // 时机下会算出偏矮的内联 min-height/height（Studio 停靠列复现），内联样式优先级高于普通
+    // CSS，故用 !important 钉住与 Chat 页一致的单行高度；多行输入时内联 height 增大不受影响。
+    :deep(.el-textarea__inner) {
+      min-height: calc(1.5em + 10px) !important;
+    }
   }
 
   .sendButton {

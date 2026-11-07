@@ -406,6 +406,15 @@ const mentionSource: MentionCanvasSource = {
 defineExpose({ canvasId, canvasReady, canvasListReady, getCanvasContext, readDocumentNode, readDocumentNodes, focusDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, resolveDocumentNodeFile, performFileAction, flushSave, cancelSave,
   addNodeAtPointer: () => activeInstance.value?.addNodeAtPointer(),
   openNodeSearch: () => activeInstance.value?.openNodeSearch(),
+  // ACT: 画布底部工具栏跨组件读写：素材库开关与缩放状态/动作委托当前激活画布实例（原左下角 canvasControls 已并入工作室工具栏）。
+  assetsVisible: computed({
+    get: () => activeInstance.value?.assetsVisible ?? false,
+    set: value => { const panel = activeInstance.value; if (panel) panel.assetsVisible = value; },
+  }),
+  zoomPercent: computed(() => activeInstance.value?.zoomPercent ?? 100),
+  applyZoom: (value: number | undefined) => activeInstance.value?.applyZoom(value),
+  zoomIn: () => activeInstance.value?.zoomIn(),
+  zoomOut: () => activeInstance.value?.zoomOut(),
   // ACT: 计划 Task 10 —— 图扇出：委托给当前激活画布实例做语义图快照/收敛应用。
   getGraphSnapshot: () => activeInstance.value?.getGraphSnapshot(),
   applyGraphSnapshot: (graph: { nodes: unknown[]; edges: unknown[] }) => activeInstance.value?.applyGraphSnapshot(graph),

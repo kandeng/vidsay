@@ -306,7 +306,7 @@ watch([visible, () => props.editor], ([open, editor], _previous, onCleanup) => {
     };
   }
   const observer = new ResizeObserver(updatePopupPosition);
-  for (const element of [input, editor.closest(".agentConversation"), editor.closest(".floatingAgent")]) if (element) observer.observe(element);
+  for (const element of [input, editor.closest(".agentConversation"), editor.closest(".chatPanel")]) if (element) observer.observe(element);
   window.addEventListener("resize", updatePopupPosition);
   window.addEventListener("scroll", updatePopupPosition, true);
   updatePopupPosition();
