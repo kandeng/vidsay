@@ -59,7 +59,6 @@ export const canvasSchemas = {
   }),
   deleteEdges: z.strictObject({ edgeIds: z.array(z.string().min(1).max(256)).min(1).max(64) }),
   selectNodes: z.strictObject({ nodeIds: z.array(nodeId) }),
-  arrangeCanvas: z.strictObject({}),
   fitCanvas: z.strictObject({ nodeIds: z.array(nodeId).optional() }),
   nodeTools: z.strictObject({ nodeId, name: z.templateLiteral(["node:", z.string().regex(/^[a-z][a-zA-Z0-9]{0,63}$/)]), args: z.record(z.string(), z.json()) }),
 };
@@ -82,7 +81,6 @@ export const canvasOperations = [
   { name: "connectNodes", label: "连接节点", description: "批量连接激活画布的输出端口 sourceHandle 和输入端口 targetHandle，一次可传入多组连接。先用 getCanvasNodes 的 ports 字段确认目标节点与端口；沿用画布和节点的连接校验，任一项校验失败则整体不执行。", parameters: canvasSchemas.connectNodes },
   { name: "deleteEdges", label: "删除连线", description: "从激活画布批量删除指定 edgeIds 的连线，任一项校验失败则整体不执行。", parameters: canvasSchemas.deleteEdges },
   { name: "selectNodes", label: "选择节点", description: "选择激活画布中指定 nodeIds 的节点；传空数组取消节点选择。", parameters: canvasSchemas.selectNodes },
-  { name: "arrangeCanvas", label: "整理画布", description: "根据节点实际尺寸和连线，将激活画布的全部顶层节点从左到右自动排列，并适应视图。子节点保持相对位置，不修改内容、连线或选择，不触发生成。返回 arrangedCount、最多 100 项 arrangedNodeIds、truncated 和 viewport；truncated 仅指 ID 回执缩略，不代表仅整理了部分节点。节点尺寸未就绪或存在不可移动节点时拒绝整理。仅在需要整理整幅画布时调用；局部调整使用 moveNodes，单纯查看使用 fitCanvas。", parameters: canvasSchemas.arrangeCanvas },
   { name: "fitCanvas", label: "适应画布", description: "调整激活画布视口以展示 nodeIds 指定的节点；省略 nodeIds 则展示全部节点。返回 fitted、viewport、nodeCount，传入 nodeIds 时另返回最多 100 项 nodeIds 和 truncated；截断只影响回执。", parameters: canvasSchemas.fitCanvas },
   { name: "nodeTools", label: "调用节点函数", description: "调用激活画布节点注册的 node:functionName。先通过 getNodeTools 读取该节点实际函数的完整 parameters，再按 schema 填写 args。新建节点可在同轮查询和调用；不要通过修改画布 JSON 代替节点函数。返回值由具体业务函数决定，五个画布读取工具的 64 KiB 限制不适用于此执行入口。", parameters: canvasSchemas.nodeTools },
 ] as const;

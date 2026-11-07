@@ -54,7 +54,7 @@ const nodeSummaries = computed<NodeSummary[]>(() => {
   const summaries = [toSummary(result.node)];
   if (Array.isArray(result.nodes)) summaries.push(...result.nodes.map(entry => toSummary(asRecord(entry).node)));
   const ids: unknown[] = [];
-  for (const value of [result.nodeIds, result.selectedNodeIds, result.arrangedNodeIds, args.nodeIds]) {
+  for (const value of [result.nodeIds, result.selectedNodeIds, args.nodeIds]) {
     if (Array.isArray(value)) ids.push(...value);
   }
   for (const value of [args.moves, args.renames]) {

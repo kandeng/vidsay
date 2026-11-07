@@ -29,13 +29,13 @@
 | `deleteNodes` / `deleteEdges` | `{nodeIds:[...]}` / `{edgeIds:[...]}` |
 | `addCanvas` / `switchCanvas` | `{name?}` / `{canvasId}` |
 | `renameCanvas` | `{canvasId?,name}` |
-| `fitCanvas` / `arrangeCanvas` | `{nodeIds?}` / `{}` |
+| `fitCanvas` | `{nodeIds?}` |
 
 批量修改按实际数量限制拆批。`addNode` 不接受任意 `data`、指定 ID 或正文；用返回的 `node.id` 查询 `getNodeTools`，再按完整 schema 用 `nodeTools` 填内容，新增回执不包含函数清单。不要调用旧版单数移动/重命名工具，不直接写画布 JSON。
 
-结构操作的 ID 回执可能缩略为最多 100 项：`arrangeCanvas` 另给 `arrangedCount`，`fitCanvas` 给 `nodeCount`，`deleteNodes` 给 `removedEdgeCount`。`truncated` 只影响返回 ID 列表，不表示只完成预览部分，不为获取完整回执重复操作；改用只读工具核对。`nodeTools` 返回具体业务函数的结果，不受上述五个读取工具的 64 KiB 上限约束。
+结构操作的 ID 回执可能缩略为最多 100 项：`fitCanvas` 给 `nodeCount`，`deleteNodes` 给 `removedEdgeCount`。`truncated` 只影响返回 ID 列表，不表示只完成预览部分，不为获取完整回执重复操作；改用只读工具核对。`nodeTools` 返回具体业务函数的结果，不受上述五个读取工具的 64 KiB 上限约束。
 
-按现有布局从左到右放内容、资产、片段，同阶段纵向排列，避免覆盖用户节点。用 `fitCanvas` 展示本轮成果；`arrangeCanvas` 会整理全部顶层节点，只在整幅整理属于用户范围时调用。当前没有分组工具，不伪造分组接口。
+按现有布局从左到右放内容、资产、片段，同阶段纵向排列，避免覆盖用户节点。用 `fitCanvas` 展示本轮成果；不要重排用户整幅画布。当前没有分组工具，不伪造分组接口。
 
 ## 内容与素材节点
 

@@ -38,8 +38,8 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 - 使用 `addCanvas`、`switchCanvas`、`addNode`、`connectNodes` 等实时工具。不要直接写入带 `toonflowCanvas` 标记的 JSON；否则会绕开节点校验、历史记录、素材清理和界面状态。
 - 提示词、模型和生成参数通过 `nodeTools` 调用节点注册的函数。先发现函数名和参数，再调用；不要猜测 `node:setPrompt` 或配置结构存在于所有节点。
 - 连接前用 `getCanvasNodes` 的 `fields: ["ports"]` 确认真实的 `sourceHandle`、`targetHandle` 和兼容的数据类型。图片或视频引用由连线提供；提示词中的引用标记应与节点实际引用顺序一致，需要核对时用 `getCanvasEdges` 查询目标入边、`getCanvasNodes` 读取目标 `data.referenceOrder` 和源节点输出。
-- 批量操作优先使用支持数组的工具。只在用户需要整理整体布局时使用 `arrangeCanvas`，局部调整使用 `moveNodes`，查看内容使用 `fitCanvas`。
-- 整理、视口适配和删除的 ID 回执最多 100 项，另提供 `arrangedCount`、`nodeCount` 或 `removedEdgeCount`；`truncated` 不代表操作只完成了部分，不为获取完整回执而重执行。`nodeTools` 返回具体业务结果，不适用五个读取工具的 64 KiB 上限。
+- 批量操作优先使用支持数组的工具。局部调整使用 `moveNodes`，查看内容使用 `fitCanvas`。
+- 视口适配和删除的 ID 回执最多 100 项，另提供 `nodeCount` 或 `removedEdgeCount`；`truncated` 不代表操作只完成了部分，不为获取完整回执而重执行。`nodeTools` 返回具体业务结果，不适用五个读取工具的 64 KiB 上限。
 - 断开、切换项目、切换画布或节点卸载后，重新发现状态，更新目标 ID，不向旧目标重试修改操作。
 
 ## 生成媒体

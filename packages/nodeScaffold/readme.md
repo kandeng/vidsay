@@ -232,7 +232,7 @@ nodeTools.register({
 
 画布读取包括 `getCanvas`、`findCanvasNodes`、`getCanvasNodes`、`getCanvasEdges` 和 `getNodeTools`，均有分页和 64 KiB 响应上限。检查 `hasMore/nextCursor`，保持原参数继续分页；空结果也可能尚未扫描完。`getCanvasNodes` 每批最多 20 个 ID，支持字段投影和 `dataKeys`，大值可沿 `path` 读取，以 `textOffset/textLimit` 分段读字符串、`valueOffset/valueLimit` 分页读数组或对象；返回的 `truncated` 提供续读路径及偏移。全图任务分批处理并保留摘要，不累积全部详情；函数 schema 始终完整。
 
-节点与连线每页最多扫描 2000 项，`totalNodes/totalEdges` 是画布总量而非筛选命中数，`selectedOnly` 读取现场选择状态；名称匹配全文，但列表中的名称预览最多 512 字符。详情和函数查询的 `nodeIds` 必须去重，正数 `textOffset/valueOffset` 必须配合 `path`。路径最多 64 层、JSON UTF-8 编码最多 2048 字节；`pathDepthLimit` 表示达到深度边界。结构操作的 ID 回执最多 100 项，整理、适配视口、删除分别带 `arrangedCount`、`nodeCount`、`removedEdgeCount`；`truncated` 仅表示回执缩略，不应重执行。`nodeTools` 业务返回值维持节点定义，不适用五个读取工具的 64 KiB 限制。
+节点与连线每页最多扫描 2000 项，`totalNodes/totalEdges` 是画布总量而非筛选命中数，`selectedOnly` 读取现场选择状态；名称匹配全文，但列表中的名称预览最多 512 字符。详情和函数查询的 `nodeIds` 必须去重，正数 `textOffset/valueOffset` 必须配合 `path`。路径最多 64 层、JSON UTF-8 编码最多 2048 字节；`pathDepthLimit` 表示达到深度边界。结构操作的 ID 回执最多 100 项，适配视口、删除分别带 `nodeCount`、`removedEdgeCount`；`truncated` 仅表示回执缩略，不应重执行。`nodeTools` 业务返回值维持节点定义，不适用五个读取工具的 64 KiB 限制。
 
 画布基础变更包括 `addCanvas`、`switchCanvas`、`renameCanvas`、`addNode`、`deleteNodes`、`moveNodes`、`renameNodes`、`connectNodes`、`deleteEdges`、`selectNodes` 和 `fitCanvas`。节点内容仍通过已注册函数修改，不向 Agent 开放任意写入节点 `data`。删除会先触发节点的 `delete` 回调并清理连接边；连接复用端口方向、数据类型和节点的 `canConnect` 校验。
 

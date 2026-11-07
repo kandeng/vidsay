@@ -58,7 +58,7 @@ watch(canvases, () => {
 const busy = ref(false);
 const initialized = ref(false);
 const loadError = ref("");
-const { toObject, setNodes, setEdges, setViewport } = useVueFlow();
+const { toObject, setNodes, setEdges, fitView } = useVueFlow();
 let controller = new AbortController();
 onBeforeUnmount(() => controller.abort());
 
@@ -179,8 +179,9 @@ async function applyCanvas(canvasId: string, directory: string, signal?: AbortSi
   setNodes(nextCanvas.flow.nodes);
   // 命中宽度由画布统一配置，不使用旧文件中的覆盖值。
   setEdges(nextCanvas.flow.edges.map(({ interactionWidth, ...edge }) => edge));
-  await setViewport(nextCanvas.flow.viewport);
+  // ACT: 不再恢复文件里保存的视口——打开画布时自动适应视图，保证图形始终在画布内可见。
   await nextTick();
+  if (nextCanvas.flow.nodes.length) fitView({ padding: 0.15, maxZoom: 1 });
   checkCanvasDirectory(directory);
   boundCanvas.value = nextCanvas;
   activeCanvasId.value = nextCanvas.id;

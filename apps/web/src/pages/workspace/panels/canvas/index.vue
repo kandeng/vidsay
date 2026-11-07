@@ -2,7 +2,7 @@
   <div
     ref="canvasElement"
     class="canvas"
-    :class="{ canvasUnselected: !canvasId, edgesHidden: !showEdges, handMode, multiSelectionMode: flow.multiSelectionActive.value, compositingEnabled: generalSettings.canvasCompositingEnabled }"
+    :class="{ canvasUnselected: !canvasId, handMode, multiSelectionMode: flow.multiSelectionActive.value, compositingEnabled: generalSettings.canvasCompositingEnabled }"
     :style="{ '--canvasEdgeColor': generalSettings.canvasEdgeColorMode === 'custom' ? generalSettings.canvasEdgeColor : 'var(--el-color-primary)' }"
     @dblclick="openNodeMenu"
     @wheel.capture="zoomCanvas"
@@ -21,8 +21,6 @@
       :only-render-visible-elements="false"
       :nodes-draggable="true"
       :node-types="nodeTypes"
-      :snap-to-grid="snapEnabled"
-      :snap-grid="[16, 16]"
       :min-zoom="0.2"
       :max-zoom="8"
       :nodes-connectable="true"
@@ -75,14 +73,7 @@
       </canvasMenu>
       <canvasControls
         v-if="canvasId"
-        ref="canvasControlsRef"
-        v-model:assetsVisible="assetsVisible"
-        v-model:snapEnabled="snapEnabled"
-        v-model:showEdges="showEdges"
-        :canvasId="canvasId"
-        :directory="project?.directory"
-        :batchHistory="canvasHistory.batch"
-        @update:showEdges="edgeDisconnect = undefined" />
+        v-model:assetsVisible="assetsVisible" />
       <nodeMenu
         :key="JSON.stringify(['nodeMenu', project?.directory, canvasId])"
         ref="nodeMenuRef"
@@ -192,7 +183,6 @@ import anonymousData from "@/lib/anonymousData";
 import { createClipboardMediaFile, dropCanvasFiles, getCanvasFileType, getClipboardMediaFiles, importCanvasFiles, isCanvasFileDrag } from "./canvasDrop";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
-import "@vue-flow/minimap/dist/style.css";
 
 const props = withDefaults(defineProps<{
   active?: boolean;
@@ -210,7 +200,6 @@ const flowData = ref<(Node | Edge)[]>([]);
 const canvasId = ref("");
 const nodeMenuRef = ref<InstanceType<typeof nodeMenu>>();
 const canvasMenuRef = ref<InstanceType<typeof canvasMenu>>();
-const canvasControlsRef = ref<InstanceType<typeof canvasControls>>();
 const selectionToolbarRef = ref<InstanceType<typeof selectionToolbar>>();
 const nodeSearchRef = ref<InstanceType<typeof nodeSearch>>();
 const nodeTypes = shallowRef<NodeTypesObject>({ canvasGroup: markRaw(groupNode) });
@@ -225,7 +214,6 @@ const remoteNodeTypes = computed(() => [
   ...new Set((flowData.value as { type?: string }[]).map((item) => item.type).filter((type): type is string => !!type?.startsWith("remote-"))),
 ]);
 let loadRequest = 0;
-const snapEnabled = ref(false);
 const zoomKeyPressed = ref(false);
 const panKeyPressed = ref(false);
 const selectionKeyPressed = ref(false);
@@ -237,11 +225,15 @@ let pointerPosition: XYPosition | undefined;
 const pressedCodes = new Set<string>();
 let gestureScale: number | undefined;
 let copyingNodes = false;
-const showEdges = ref(true);
 const assetsVisible = ref(false);
 const assetLibraryRef = ref<InstanceType<typeof assetLibrary>>();
 const edgeDisconnect = ref<{ id: string; x: number; y: number }>();
 const flow = useVueFlow(props.runtimeKey);
+// ACT: 画布内容始终保持在视野内——节点/连线数量变化（载入、新增、删除、编排器扇出收敛）后自动适应视图，
+// 取代已移除的手动「适应视图 / 适合屏幕」控件；空画布不适应。
+watch(() => [flow.getNodes.value.length, flow.getEdges.value.length], () => {
+  void nextTick(() => { if (flow.getNodes.value.length) void flow.fitView({ padding: 0.15, maxZoom: 1 }); });
+});
 const nodeDocument: NodeDocumentContext = { targets: shallowReactive(new Map()), mounts: new Map(), states: shallowReactive(new Map()) };
 const canvasDirty = ref(false);
 const canvasSaveError = ref("");
@@ -1105,7 +1097,7 @@ function updateCanvasKeys(event: KeyboardEvent) {
   updateCanvasSelection(event);
   if (event.type === "keyup" || event.defaultPrevented || event.isComposing || !inCanvas || editing) return;
   const action = ([
-    "group", "mergeGroup", "ungroup", "addNode", "moveTool", "handTool", "arrange", "search",
+    "group", "mergeGroup", "ungroup", "addNode", "moveTool", "handTool", "search",
     "delete", "copy", "paste", "undo", "redo", "zoomIn", "zoomOut", "fitView",
   ] as const).find((action) =>
     shortcutMatches(event, shortcuts[action])
@@ -1140,7 +1132,6 @@ function updateCanvasKeys(event: KeyboardEvent) {
     void selectionToolbarRef.value?.operate(action);
   } else if (action === "addNode") addNodeAtPointer();
   else if (action === "moveTool" || action === "handTool") selectedTool.value = action === "handTool" ? "hand" : "move";
-  else if (action === "arrange") void canvasControlsRef.value?.arrangeNodes();
   else if (action === "search") nodeSearchRef.value?.open();
   else void flow[action]();
 }
@@ -1368,14 +1359,6 @@ const defaultEdgeOptions = markRaw({
 
   &.handMode :deep(.vue-flow__pane) {
     cursor: grab;
-  }
-
-  &.edgesHidden :deep(.vue-flow__edges:not(:has(.edgeNodeActive))) {
-    display: none;
-  }
-  &.edgesHidden :deep(.vue-flow__handle:not(.connectedNodeActive)) {
-    // Vue Flow 仍会测量隐藏端口，必须保留布局以免零尺寸污染连线坐标。
-    visibility: hidden !important;
   }
 
   :deep(.vue-flow__edge.edgeActive .vue-flow__edge-path) {

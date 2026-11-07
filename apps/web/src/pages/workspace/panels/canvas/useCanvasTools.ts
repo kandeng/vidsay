@@ -6,7 +6,6 @@ import { asrRequestSchema } from "@toonflow/tools-scaffold/runtime";
 import { isBrowserAudioAsrSupported, transcribeBrowserAudio } from "@toonflow/asr";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { arrangeCanvas } from "./arrangeCanvas";
 import { canvasEdgeSummary, canvasNodeSummary, createCanvasQueries, isCanvasRead } from "./canvasQueries";
 
 export function useCanvasTools(options: {
@@ -223,11 +222,6 @@ export function useCanvasTools(options: {
         await nextTick();
         const selected = flow.getSelectedNodes.value;
         return { selectedNodeIds: selected.slice(0, 100).map(node => node.id), selectedCount: selected.length, truncated: selected.length > 100 };
-      }
-      case "arrangeCanvas": {
-        canvasSchemas.arrangeCanvas.parse(request.args);
-        const { arrangedNodeIds, viewport } = await arrangeCanvas(flow, signal);
-        return { arrangedNodeIds: arrangedNodeIds.slice(0, 100), arrangedCount: arrangedNodeIds.length, truncated: arrangedNodeIds.length > 100, viewport };
       }
       case "fitCanvas": {
         const { nodeIds } = canvasSchemas.fitCanvas.parse(request.args);

@@ -152,9 +152,5 @@ input[inputmode="decimal"],
   --vf-node-color: var(--el-border-color-darker);
   --vf-connection-path: var(--el-text-color-secondary);
   --vf-handle: var(--el-text-color-secondary);
-
-  .vue-flow__minimap {
-    background-color: var(--el-bg-color);
-  }
 }
 </style>

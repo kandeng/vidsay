@@ -4804,22 +4804,6 @@
     "apps/web/src/pages/workspace/panels/canvas/canvasDrop.ts",
     "apps/web/src/pages/workspace/panels/canvas/index.vue"
   ],
-  "节点 {0} 不允许移动": [
-    "apps/web/src/pages/workspace/panels/canvas/arrangeCanvas.ts",
-    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
-  ],
-  "节点 {0} 尚未完成尺寸测量，请等待节点显示后重试": [
-    "apps/web/src/pages/workspace/panels/canvas/arrangeCanvas.ts",
-    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
-  ],
-  "节点 {0} 的位置无效": [
-    "apps/web/src/pages/workspace/panels/canvas/arrangeCanvas.ts",
-    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
-  ],
-  "节点 {0} 的排列位置无效": [
-    "apps/web/src/pages/workspace/panels/canvas/arrangeCanvas.ts",
-    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
-  ],
   "文件或目录不存在": [
     "apps/web/src/pages/workspace/panels/canvas/canvasFiles.ts"
   ],
@@ -4895,43 +4879,6 @@
   "打开素材库": [
     "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
   ],
-  "整理画布": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue",
-    "apps/web/src/lib/canvasShortcuts.ts"
-  ],
-  "撤销整理": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "隐藏地图": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "显示地图": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "显示或隐藏地图": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "关闭网格吸附": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "开启网格吸附": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "网格吸附": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "隐藏连线": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "显示连线": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "显示或隐藏连线": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "适应视图": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
   "缩放菜单（滚轮调整缩放）": [
     "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
   ],
@@ -4950,15 +4897,6 @@
     "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue",
     "apps/web/src/lib/i18n.ts",
     "apps/web/src/lib/canvasShortcuts.ts"
-  ],
-  "适合屏幕": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "整理画布失败": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
-  ],
-  "撤销整理失败": [
-    "apps/web/src/pages/workspace/panels/canvas/components/canvasControls.vue"
   ],
   "连接分组节点": [
     "apps/web/src/pages/workspace/panels/canvas/components/selectionHandle.vue"
@@ -5353,7 +5291,19 @@
   "节点已变化，请重新选择后整理": [
     "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
   ],
+  "节点 {0} 不允许移动": [
+    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
+  ],
+  "节点 {0} 尚未完成尺寸测量，请等待节点显示后重试": [
+    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
+  ],
   "节点 {0} 的分组关系无效": [
+    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
+  ],
+  "节点 {0} 的位置无效": [
+    "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
+  ],
+  "节点 {0} 的排列位置无效": [
     "apps/web/src/pages/workspace/panels/canvas/arrangeSelection.ts"
   ],
   "从左上角打开一个画布，就可以开始创作啦": [

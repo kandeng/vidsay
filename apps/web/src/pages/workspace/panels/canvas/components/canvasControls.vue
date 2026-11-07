@@ -1,12 +1,4 @@
 <template>
-  <mini-map
-    v-if="showMap"
-    class="canvasMiniMap"
-    position="bottom-left"
-    :pannable="true"
-    :zoomable="true"
-    node-color="var(--el-fill-color-dark)"
-    mask-color="var(--el-mask-color-extra-light)" />
   <panel class="canvasControlsPanel" position="bottom-left">
     <el-card class="canvasControlsCard" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
       <div class="canvasControls">
@@ -19,59 +11,6 @@
             aria-label="素材库"
             @click="assetsVisible = !assetsVisible">
             <icon-folders :size="18" />
-          </el-button>
-        </el-tooltip>
-        <!-- trigger 用 contextmenu 是为了让整理按钮只由 arrangeNodes 控制显隐，同时仍保留点击外部自动关闭 -->
-        <el-tooltip :showArrow="false" content="整理画布" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="undoPopoverVisible">
-          <span class="toolTrigger">
-            <el-popover trigger="contextmenu" placement="top-start" :width="180" v-model:visible="undoPopoverVisible">
-              <template #reference>
-                <el-button class="toolButton" text :disabled="!canArrange" aria-label="整理画布" @click="arrangeNodes">
-                  <icon-sitemap :size="18" />
-                </el-button>
-              </template>
-              <div class="zoomMenu">
-                <el-button class="zoomAction" style="width: 100%" text @click="undoArrange">撤销整理</el-button>
-              </div>
-            </el-popover>
-          </span>
-        </el-tooltip>
-        <el-tooltip :showArrow="false" :content="showMap ? '隐藏地图' : '显示地图'" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-          <el-button
-            class="toolButton"
-            text
-            :type="showMap ? 'primary' : 'default'"
-            :aria-pressed="showMap"
-            aria-label="显示或隐藏地图"
-            @click="showMap = !showMap">
-            <icon-map :size="18" />
-          </el-button>
-        </el-tooltip>
-        <el-tooltip :showArrow="false" :content="snapEnabled ? '关闭网格吸附' : '开启网格吸附'" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-          <el-button
-            class="toolButton"
-            text
-            :type="snapEnabled ? 'primary' : 'default'"
-            :aria-pressed="snapEnabled"
-            aria-label="网格吸附"
-            @click="snapEnabled = !snapEnabled">
-            <icon-magnet :size="18" />
-          </el-button>
-        </el-tooltip>
-        <el-tooltip :showArrow="false" :content="showEdges ? '隐藏连线' : '显示连线'" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-          <el-button
-            class="toolButton"
-            text
-            :type="showEdges ? 'primary' : 'default'"
-            :aria-pressed="showEdges"
-            aria-label="显示或隐藏连线"
-            @click="showEdges = !showEdges">
-            <icon-arrow-guide :size="18" />
-          </el-button>
-        </el-tooltip>
-        <el-tooltip :showArrow="false" content="适应视图" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-          <el-button class="toolButton" text aria-label="适应视图" @click="fitView()">
-            <icon-focus-centered :size="18" />
           </el-button>
         </el-tooltip>
         <el-tooltip :showArrow="false"
@@ -105,7 +44,6 @@
                 </el-input-number>
                 <el-button class="zoomAction" text @click="zoomIn()">放大</el-button>
                 <el-button class="zoomAction" text @click="zoomOut()">缩小</el-button>
-                <el-button class="zoomAction" text @click="fitView()">适合屏幕</el-button>
               </div>
             </el-popover>
           </span>
@@ -116,102 +54,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { Panel, useVueFlow, type XYPosition } from "@vue-flow/core";
-import { MiniMap } from "@vue-flow/minimap";
-import { IconMap, IconMagnet, IconFocusCentered } from "@tabler/icons-vue";
-import { ElMessage } from "element-plus";
-import { arrangeCanvas } from "../arrangeCanvas";
+import { computed, ref } from "vue";
+import { Panel, useVueFlow } from "@vue-flow/core";
 
-const props = defineProps<{
-  canvasId: string;
-  directory: string | undefined;
-  batchHistory: (action: () => Promise<void>) => Promise<void>;
-}>();
-const snapEnabled = defineModel<boolean>("snapEnabled", { required: true });
-const showEdges = defineModel<boolean>("showEdges", { required: true });
+// ACT: 底部控制条精简——仅保留素材库开关与缩放菜单（百分比输入 + 放大/缩小 + 滚轮）。
+// 已移除：整理画布（自动排布易误解作者意图，牺牲美观换正确）、小地图（简化单画布下无价值）、
+// 网格吸附（收益低）、隐藏/显示连线（隐藏连线有风险，应始终显示）、适应视图按钮与菜单项
+// （「图形始终在画布内可见」改由画布面板在内容变化时自动适应视图实现，无需手动适应）。
 const assetsVisible = defineModel<boolean>("assetsVisible", { default: false });
-const showMap = ref(false);
 const zoomMenuVisible = ref(false);
-const flow = useVueFlow();
-const { viewport, zoomTo, zoomIn, zoomOut, fitView, getNodes, updateNode } = flow;
+const { viewport, zoomTo, zoomIn, zoomOut } = useVueFlow();
 const zoomPercent = computed(() => Math.round(viewport.value.zoom * 100));
-const layoutSnapshot = ref<{ id: string; position: XYPosition }[]>();
-const undoPopoverVisible = ref(false);
-const arranging = ref(false);
-let arrangeController: AbortController | undefined;
-const canArrange = computed(() => {
-  const nodes = getNodes.value.filter((node) => !node.parentNode);
-  return (
-    !!props.canvasId &&
-    !!props.directory &&
-    !arranging.value &&
-    nodes.length > 0 &&
-    nodes.every((node) => node.dimensions.width > 0 && node.dimensions.height > 0)
-  );
-});
-defineExpose({ arrangeNodes });
-
-watch(
-  () => [props.canvasId, props.directory],
-  () => {
-    arrangeController?.abort();
-    layoutSnapshot.value = undefined;
-    undoPopoverVisible.value = false;
-  },
-  { flush: "sync" }
-);
-onBeforeUnmount(() => arrangeController?.abort());
 
 function applyZoom(value: number | undefined) {
   if (value !== undefined && Number.isFinite(value)) void zoomTo(value / 100);
 }
-
-async function arrangeNodes() {
-  if (!canArrange.value) return;
-  const controller = new AbortController();
-  arrangeController = controller;
-  arranging.value = true;
-  try {
-    await props.batchHistory(async () => {
-      const { snapshot, arrangedNodeIds } = await arrangeCanvas(flow, controller.signal);
-      controller.signal.throwIfAborted();
-      if (!arrangedNodeIds.length) return;
-      layoutSnapshot.value = snapshot;
-      undoPopoverVisible.value = true;
-    });
-  } catch (error) {
-    if (!controller.signal.aborted) ElMessage.error(error instanceof Error ? error.message : "整理画布失败");
-  } finally {
-    arrangeController = undefined;
-    arranging.value = false;
-  }
-}
-
-async function undoArrange() {
-  const snapshot = layoutSnapshot.value;
-  if (!snapshot) return;
-  try {
-    await props.batchHistory(async () => {
-      const nodeIds = new Set(getNodes.value.map((node) => node.id));
-      snapshot.forEach(({ id, position }) => {
-        if (nodeIds.has(id)) updateNode(id, { position });
-      });
-      layoutSnapshot.value = undefined;
-      undoPopoverVisible.value = false;
-    });
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "撤销整理失败");
-  }
-}
 </script>
 
 <style lang="scss" scoped>
-.canvasMiniMap.vue-flow__minimap { bottom: 46px; }
-
 @container canvasWorkspace (max-width: 1040px) {
   .canvasControlsPanel.vue-flow__panel { bottom: 46px; }
-  .canvasMiniMap.vue-flow__minimap { bottom: 92px; }
 }
 
 .canvasControlsCard { height: 34px; box-sizing: border-box; }
