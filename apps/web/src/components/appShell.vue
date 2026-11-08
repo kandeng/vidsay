@@ -7,8 +7,10 @@ import { locale, translate } from "@toonflow/i18n/vue";
 import logoUrl from "@/assets/logo_vidsay.svg";
 // ACT: 左栏与顶栏图标统一取自 src/icons（以 CSS mask 着色，跟随 currentColor）。
 import iconPlaza from "@/icons/photo.svg";
-import iconChat from "@/icons/chat.svg";
-import iconStudio from "@/icons/recorder.svg";
+// ACT: 一键生成/分步生成的左栏图标与模式切换器共用同一对 generator SVG；mask 只取 alpha，
+// 文件内固化的 #515151 fill 不参与渲染，颜色仍随 currentColor（常规/悬停/激活态）。
+import iconOneShot from "@/icons/generator_one_shot.svg";
+import iconStepByStep from "@/icons/generator_step_by_step.svg";
 import iconAccount from "@/icons/user.svg";
 import iconSettings from "@/icons/settings.svg";
 import languageSelect from "@/components/languageSelect.vue";
@@ -24,11 +26,13 @@ const loginVisible = ref(false);
 // ACT: 上组为内容页（广场/一键生成/分步生成），下组为账户；左栏改为图标导航（悬停显示文字），设置入口在下组并直接打开设置弹窗。
 const topNav: { path: string; label: string; icon: string; size?: number }[] = [
   // ACT: photo.svg 的字形内切于圆，横向仅占 viewBox 的 938.6/1024≈0.917，在 22px 容器下实际宽约 20.2px；
-  // 放大到 24px 使其渲染宽度 0.917×24≈22px，与全出血的 recorder（分步生成）等宽。
+  // 放大到 24px 使其渲染宽度 0.917×24≈22px，与同栏 22px 满高图标的光学尺寸对齐。
   { path: "/home", label: "广场", icon: iconPlaza, size: 24 },
-  // ACT: 群聊气泡为椭圆+小点，光学尺寸偏小；单独放大到 22px 的 110%（24.2px）以对齐 recorder 的视觉重量。
-  { path: "/chat", label: "一键生成", icon: iconChat, size: 24.2 },
-  { path: "/studio", label: "分步生成", icon: iconStudio },
+  // ACT: 一键生成字形在 viewBox 内竖向占 96.4%（横向 77.1%）：基准容器 23.7px 渲染高≈22.8px（与换图前 chat 气泡一致）；
+  // 按需求放大 120% → 容器 28.4px，渲染高≈27.4px。
+  { path: "/chat", label: "一键生成", icon: iconOneShot, size: 28.4 },
+  // ACT: 分步生成字形高度满幅（cover 1.0）：基准 22px 渲染高 22px（与换图前 recorder 同尺寸）；按需求放大 120% → 26.4px。
+  { path: "/studio", label: "分步生成", icon: iconStepByStep, size: 26.4 },
 ];
 const bottomNav = [
   { path: "/account", label: "账户", icon: iconAccount },
@@ -86,7 +90,7 @@ watch([() => auth.signedIn, () => auth.avatarUrl, locale], () => { void nextTick
   <div class="appShell">
     <!-- 左栏：上组导航 + 弹性间隔 + 分隔线 + 下组导航（品牌已移至顶栏居中） -->
     <aside class="shellLeft">
-      <nav class="shellNav" :aria-label="translate('主导航')">
+      <nav class="shellNav shellNavTop" :aria-label="translate('主导航')">
         <!-- ACT: 导航项图标化，仅悬停时通过 el-tooltip 显示文字。 -->
         <el-tooltip
           v-for="item in topNav" :key="item.path"
@@ -249,6 +253,11 @@ watch([() => auth.signedIn, () => auth.avatarUrl, locale], () => { void nextTick
   flex-direction: column;
   align-items: center;
   gap: 4px;
+}
+
+// ACT: 顶组三枚图标（广场/一键生成/分步生成）之间的两个间距按需求加到 8px（默认 4px 的两倍）；下组间距不变。
+.shellNavTop {
+  gap: 8px;
 }
 
 .shellNavItem {
