@@ -1,6 +1,7 @@
 <template>
-  <!-- ACT: contained 模式 teleport 到 shell 主面板（shellMain），加载动画只覆盖主面板，左栏与顶栏保持可见。 -->
-  <teleport :to="contained ? 'main.shellMain' : 'body'">
+  <!-- ACT: contained 模式 teleport 到 shell 主面板（shellMain），加载动画只覆盖主面板，左栏与顶栏保持可见；
+       containTarget 可把落点收窄到页面内子区域（/studio 用 .splashZone 只罩画布列，聊天框不被遮罩重绘）。 -->
+  <teleport :to="contained ? containTarget : 'body'">
     <div v-if="visible" class="loadingPage" :class="{ contained }" role="status" aria-label="正在加载项目">
       <div class="logoWrap" :class="{ drawn, filling }" aria-hidden="true">
         <div class="logoOutline" @animationend="finishDrawing">
@@ -18,7 +19,7 @@ import { onBeforeUnmount, ref, watch } from "vue";
 import logoRaw from "@/assets/logo_vidsay.svg?raw";
 import logoUrl from "@/assets/logo_vidsay.svg";
 
-const props = defineProps<{ active: boolean; contained?: boolean }>();
+const props = withDefaults(defineProps<{ active: boolean; contained?: boolean; containTarget?: string }>(), { containTarget: "main.shellMain" });
 const visible = defineModel<boolean>("visible", { default: false });
 const drawn = defineModel<boolean>("drawn", { default: false });
 const logoDocument = new DOMParser().parseFromString(logoRaw, "image/svg+xml");

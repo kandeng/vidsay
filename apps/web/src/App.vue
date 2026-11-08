@@ -8,8 +8,9 @@
         </appShell>
         <component v-else :is="currentComponent" />
       </router-view>
-      <!-- ACT: 带 shell 的路由把项目加载动画限制在主面板内，左栏/顶栏不遮挡、不重绘。 -->
-      <loadingPage v-model:visible="workspaceStore.projectLoadingVisible" v-model:drawn="workspaceStore.projectLoadingDrawn" :active="workspaceStore.projectLoading" :contained="shellRoute" />
+      <!-- ACT: 带 shell 的路由把项目加载动画限制在主面板内，左栏/顶栏不遮挡、不重绘；
+           /studio 进一步收窄到画布列（.splashZone），模式切换时右侧聊天框保持原样不被遮罩重绘。 -->
+      <loadingPage v-model:visible="workspaceStore.projectLoadingVisible" v-model:drawn="workspaceStore.projectLoadingDrawn" :active="workspaceStore.projectLoading" :contained="shellRoute" :contain-target="splashTarget" />
       <ffmpegRequired />
     </config-provider>
   </el-config-provider>
@@ -43,6 +44,8 @@ const workspaceStore = useWorkspaceStore();
 const route = useRoute();
 // ACT: 仅带 shell 元信息的路由套用全局外壳（左栏 + 顶栏）；/hello 引导页保持全屏。
 const shellRoute = computed(() => route.meta.shell === true);
+// ACT: contained 加载动画落点：/studio 页只罩画布列（.splashZone），聊天框列在项目加载期间保持可见可交互。
+const splashTarget = computed(() => (route.path === "/studio" ? ".splashZone" : "main.shellMain"));
 
 // ACT: TDesign 缺少的语言使用英语基底，聊天控件由应用字典补齐。
 const tdesignLocales = {

@@ -1,5 +1,5 @@
 <template>
-  <main ref="workspaceEl" class="workspacePage" :inert="workspaceStore.projectLoadingVisible" :style="{ '--chat-w': `${chatWidth}px` }">
+  <main ref="workspaceEl" class="workspacePage" :style="{ '--chat-w': `${chatWidth}px` }">
     <canvasPanel
       :key="workspaceStore.project?.directory"
       v-model:selectedTool="selectedTool"
@@ -9,6 +9,9 @@
       :inert="activePanel !== 'canvas'"
       :aria-hidden="activePanel !== 'canvas'"
       :active="activePanel === 'canvas'" />
+    <!-- ACT: 项目加载遮罩（loadingPage contained）落点：网格第一列跨两行（画布/文档 + 底部按钮条）。
+         遮罩与加载期 inert 只锁本项目区，模式切换/进房时右侧聊天框保持可见可交互、不随项目加载重绘。 -->
+    <div class="splashZone" :inert="workspaceStore.projectLoadingVisible" />
     <keep-alive :key="workspaceStore.project?.directory" :max="1">
       <documentPanel
         v-if="activePanel === 'document'"
@@ -579,6 +582,16 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
     grid-area: 1 / 1;
     min-width: 0;
     min-height: 0;
+  }
+
+  // ACT: 加载遮罩落点区（透明空层）：position:relative 供 contained 遮罩绝对定位铺满本区；
+  // 自身不拦截指针，遮罩本体恢复 auto 以在项目加载期间挡住画布误操作。
+  .splashZone {
+    grid-area: 1 / 1 / 3 / 2;
+    position: relative;
+    pointer-events: none;
+
+    :deep(.loadingPage) { pointer-events: auto; }
   }
 
   // ACT: 可拖拽分隔条（第二列，跨两行）：4px 命中区居中常显 1px 竖直分割线，
