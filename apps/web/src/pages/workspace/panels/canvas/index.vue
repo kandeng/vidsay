@@ -215,6 +215,24 @@ const defaultWheelZoom = computed(() => getShortcutBindings(generalSettings.valu
 const defaultDragPan = computed(() => getShortcutBindings(generalSettings.value.canvasShortcuts.pan).includes("None"));
 const selectedTool = defineModel<"move" | "hand">("selectedTool", { default: "move" });
 const handMode = computed(() => props.active && !props.settingsVisible && (selectedTool.value === "hand" || panKeyPressed.value));
+// ACT: 移动画布（抓手）为一次性手势模式：按钮武装后，画布空白处一次左键按下-抬起（即一次平移拖拽）
+// 自动回落到移动工具，节点恢复可点击配置；抓手期间 transformationpane 指针 inert，节点本就点不到。
+// 空格临时平移不走 selectedTool，不受影响；再点一次按钮也可提前退出（按钮为 toggle）。
+let handGestureController: AbortController | undefined;
+watch(selectedTool, tool => {
+  handGestureController?.abort();
+  handGestureController = undefined;
+  if (tool !== "hand") return;
+  const controller = new AbortController();
+  handGestureController = controller;
+  const onDown = (event: PointerEvent) => {
+    if (event.button !== 0 || !(event.target instanceof Element) || !event.target.closest(".vue-flow__pane")) return;
+    canvasElement.value?.removeEventListener("pointerdown", onDown);
+    window.addEventListener("pointerup", () => { selectedTool.value = "move"; }, { once: true, signal: controller.signal });
+  };
+  canvasElement.value?.addEventListener("pointerdown", onDown, { signal: controller.signal });
+});
+onScopeDispose(() => handGestureController?.abort());
 let pointerPosition: XYPosition | undefined;
 const pressedCodes = new Set<string>();
 let gestureScale: number | undefined;

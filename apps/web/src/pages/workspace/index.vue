@@ -129,7 +129,7 @@
                 class="barButton iconOnly"
                 :aria-pressed="selectedTool === 'hand'"
                 aria-label="移动画布"
-                @click="selectedTool = 'hand'">
+                @click="selectedTool = selectedTool === 'hand' ? 'move' : 'hand'">
                 <span class="toolIcon" :style="{ '--tool-icon': `url(&quot;${iconCanvasMove}&quot;)` }" aria-hidden="true" />
               </button>
             </el-tooltip>
