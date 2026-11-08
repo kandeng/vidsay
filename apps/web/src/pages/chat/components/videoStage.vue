@@ -107,7 +107,8 @@ const boxRef = ref<HTMLElement>();
 const inkRef = ref<HTMLCanvasElement>();
 const textInput = ref<HTMLInputElement>();
 const tool = ref<"" | "arrow" | "rect" | "curve" | "text">("");
-const inkColor = ref("#ff3b30");
+// ACT: 默认墨色为海军蓝（navy #000080）：鲜红与主题蓝都偏刺眼，深色蓝更沉稳。
+const inkColor = ref("#000080");
 const marks = ref<Mark[]>([]);
 let draft: Mark | null = null;
 const textAt = ref<{ x: number; y: number } | null>(null);
@@ -665,11 +666,13 @@ onBeforeUnmount(() => {
     }
   }
 
-  // ACT: 墨色选择器：可见色块即内容盒，与笔按钮同视觉重量（同 MeshViewer 做法）。
+  // ACT: 墨色选择器：外框与笔按钮同为 30×30 盒；内色块缩到 14×14（padding 7px + border-box），
+  // 比笔按钮的 18×18 字形再小一圈，实心色块视觉重量才与邻按钮平衡。
   input[type="color"] {
+    box-sizing: border-box;
     width: 30px;
     height: 30px;
-    padding: 2px;
+    padding: 7px;
     border: 1px solid var(--el-border-color);
     border-radius: 8px;
     background: transparent;
