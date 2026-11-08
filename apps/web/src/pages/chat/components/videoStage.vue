@@ -483,12 +483,11 @@ onBeforeUnmount(() => {
   border-radius: var(--ui-radius);
   background: #000;
 
-  // ACT: 无视频时的占位态：透明底 + 虚线框勾出播放器区域，空态文案居中于盒内。
+  // ACT: 无视频时的占位态：透明底且无边框（原虚线框按需求移除，空态只留胶片图与文案），空态文案居中于盒内。
   &.empty {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px dashed var(--el-border-color);
     background: transparent;
   }
 
