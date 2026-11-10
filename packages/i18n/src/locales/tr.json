@@ -3237,5 +3237,21 @@
   "清除标记": "İşaretleri temizle",
   "上传失败，请稍后重试": "Yükleme başarısız, lütfen daha sonra tekrar deneyin",
   "输入文字，Enter 落笔，Esc 取消": "Metin yazın, Enter ile yerleştirin, Esc ile iptal edin",
-  "下载截图": "Ekran görüntüsünü indir"
+  "下载截图": "Ekran görüntüsünü indir",
+  "添加队友": "Takım arkadaşı ekle",
+  "删除队友": "Takım arkadaşını sil",
+  "移交群主": "Sunucuyu devret",
+  "输入用户 ID": "Kullanıcı kimliğini yazın",
+  "请选择正确的队友": "Lütfen doğru takım arkadaşını seçin",
+  "该队友不存在": "Bu takım arkadaşı mevcut değil",
+  "该队友已在团队中": "Bu kullanıcı her zaman takımda",
+  "暂无队友": "Henüz takım arkadaşı yok",
+  "已添加队友": "Takım arkadaşı eklendi",
+  "已删除队友": "Takım arkadaşı silindi",
+  "已移交群主": "Sunucu devredildi",
+  "请先选择要删除的队友": "Önce silinecek takım arkadaşını seçin",
+  "请先选择要移交的队友": "Önce devredilecek takım arkadaşını seçin",
+  "添加失败，请稍后重试": "Eklenemedi, lütfen sonra tekrar deneyin",
+  "删除失败，请稍后重试": "Silinemedi, lütfen sonra tekrar deneyin",
+  "移交失败，请稍后重试": "Devredilemedi, lütfen sonra tekrar deneyin"
 }

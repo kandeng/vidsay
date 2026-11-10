@@ -3237,5 +3237,21 @@
   "清除标记": "Xóa đánh dấu",
   "上传失败，请稍后重试": "Tải lên thất bại, vui lòng thử lại sau",
   "输入文字，Enter 落笔，Esc 取消": "Nhập chữ, Enter để đặt, Esc để hủy",
-  "下载截图": "Tải ảnh chụp màn hình"
+  "下载截图": "Tải ảnh chụp màn hình",
+  "添加队友": "Thêm đồng đội",
+  "删除队友": "Xóa đồng đội",
+  "移交群主": "Chuyển chủ phòng",
+  "输入用户 ID": "Nhập ID người dùng",
+  "请选择正确的队友": "Hãy chọn đúng đồng đội",
+  "该队友不存在": "Đồng đội này không tồn tại",
+  "该队友已在团队中": "Người dùng này luôn ở trong đội",
+  "暂无队友": "Chưa có đồng đội",
+  "已添加队友": "Đã thêm đồng đội",
+  "已删除队友": "Đã xóa đồng đội",
+  "已移交群主": "Đã chuyển chủ phòng",
+  "请先选择要删除的队友": "Hãy chọn đồng đội cần xóa trước",
+  "请先选择要移交的队友": "Hãy chọn đồng đội nhận chuyển trước",
+  "添加失败，请稍后重试": "Thêm thất bại, vui lòng thử lại sau",
+  "删除失败，请稍后重试": "Xóa thất bại, vui lòng thử lại sau",
+  "移交失败，请稍后重试": "Chuyển thất bại, vui lòng thử lại sau"
 }

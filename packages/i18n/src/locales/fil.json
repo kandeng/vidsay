@@ -3235,5 +3235,21 @@
   "清除标记": "Burahin ang mga marka",
   "上传失败，请稍后重试": "Nabigo ang pag-upload, pakisubukan muli mamaya",
   "输入文字，Enter 落笔，Esc 取消": "Mag-type ng teksto, Enter para ilagay, Esc para kanselahin",
-  "下载截图": "I-download ang screenshot"
+  "下载截图": "I-download ang screenshot",
+  "添加队友": "Magdagdag ng kasama",
+  "删除队友": "Magtanggal ng kasama",
+  "移交群主": "Ilipat ang host",
+  "输入用户 ID": "Ilagay ang user ID",
+  "请选择正确的队友": "Mangyaring piliin ang tamang kasama",
+  "该队友不存在": "Wala ang kasama na ito",
+  "该队友已在团队中": "Ang user na ito ay palaging nasa team",
+  "暂无队友": "Wala pang kasama",
+  "已添加队友": "Naidagdag ang kasama",
+  "已删除队友": "Natanggal ang kasama",
+  "已移交群主": "Nailipat ang host",
+  "请先选择要删除的队友": "Pumili muna ng kasamang tatanggalin",
+  "请先选择要移交的队友": "Pumili muna ng kasamang tatanggap ng host",
+  "添加失败，请稍后重试": "Nabigo ang pagdagdag, subukan muli mamaya",
+  "删除失败，请稍后重试": "Nabigo ang pagtanggal, subukan muli mamaya",
+  "移交失败，请稍后重试": "Nabigo ang paglipat, subukan muli mamaya"
 }

@@ -3235,5 +3235,21 @@
   "清除标记": "Hapus tanda",
   "上传失败，请稍后重试": "Gagal mengunggah, silakan coba lagi nanti",
   "输入文字，Enter 落笔，Esc 取消": "Ketik teks, Enter untuk menempatkan, Esc untuk batal",
-  "下载截图": "Unduh tangkapan layar"
+  "下载截图": "Unduh tangkapan layar",
+  "添加队友": "Tambah rekan tim",
+  "删除队友": "Hapus rekan tim",
+  "移交群主": "Alihkan host",
+  "输入用户 ID": "Masukkan ID pengguna",
+  "请选择正确的队友": "Silakan pilih rekan tim yang tepat",
+  "该队友不存在": "Rekan tim ini tidak ada",
+  "该队友已在团队中": "Pengguna ini selalu ada di tim",
+  "暂无队友": "Belum ada rekan tim",
+  "已添加队友": "Rekan tim ditambahkan",
+  "已删除队友": "Rekan tim dihapus",
+  "已移交群主": "Host dialihkan",
+  "请先选择要删除的队友": "Pilih dulu rekan tim yang akan dihapus",
+  "请先选择要移交的队友": "Pilih dulu rekan tim tujuan pengalihan",
+  "添加失败，请稍后重试": "Gagal menambahkan, coba lagi nanti",
+  "删除失败，请稍后重试": "Gagal menghapus, coba lagi nanti",
+  "移交失败，请稍后重试": "Gagal mengalihkan host, coba lagi nanti"
 }

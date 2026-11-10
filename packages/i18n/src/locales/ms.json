@@ -3235,5 +3235,21 @@
   "清除标记": "Kosongkan tanda",
   "上传失败，请稍后重试": "Muat naik gagal, sila cuba lagi kemudian",
   "输入文字，Enter 落笔，Esc 取消": "Taip teks, Enter untuk letak, Esc untuk batal",
-  "下载截图": "Muat turun tangkapan skrin"
+  "下载截图": "Muat turun tangkapan skrin",
+  "添加队友": "Tambah rakan sepasukan",
+  "删除队友": "Padam rakan sepasukan",
+  "移交群主": "Pindah hos",
+  "输入用户 ID": "Masukkan ID pengguna",
+  "请选择正确的队友": "Sila pilih rakan sepasukan yang betul",
+  "该队友不存在": "Rakan sepasukan ini tidak wujud",
+  "该队友已在团队中": "Pengguna ini sentiasa dalam pasukan",
+  "暂无队友": "Tiada rakan sepasukan lagi",
+  "已添加队友": "Rakan sepasukan ditambah",
+  "已删除队友": "Rakan sepasukan dipadam",
+  "已移交群主": "Hos dipindahkan",
+  "请先选择要删除的队友": "Pilih dahulu rakan sepasukan untuk dipadam",
+  "请先选择要移交的队友": "Pilih dahulu rakan sepasukan untuk pemindahan",
+  "添加失败，请稍后重试": "Gagal menambah, cuba lagi kemudian",
+  "删除失败，请稍后重试": "Gagal memadam, cuba lagi kemudian",
+  "移交失败，请稍后重试": "Gagal memindah hos, cuba lagi kemudian"
 }

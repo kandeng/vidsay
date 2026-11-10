@@ -3381,5 +3381,21 @@
   "授权后，客服 Agent 才能在本房间驱动你的设备与调用你的本地模型。授权按账号记录，随时可关闭。": "Only after you grant consent can the Customer Service Agent drive your devices and call your local models in this room. Consent is recorded per account and can be revoked at any time.",
   "允许驱动我的设备（画布/节点操作）": "Allow driving my devices (canvas/node operations)",
   "允许调用我的本地模型": "Allow calling my local models",
-  "尚未在「设置 → 本地模型」配置可用的本地模型。": "No usable local model has been configured yet under Settings → Local Models."
+  "尚未在「设置 → 本地模型」配置可用的本地模型。": "No usable local model has been configured yet under Settings → Local Models.",
+  "添加队友": "Add teammate",
+  "删除队友": "Remove teammate",
+  "移交群主": "Transfer host",
+  "输入用户 ID": "Type in the user ID",
+  "请选择正确的队友": "Please select the right teammate",
+  "该队友不存在": "This teammate does not exist",
+  "该队友已在团队中": "This user is always in the team",
+  "暂无队友": "No teammates yet",
+  "已添加队友": "Teammate added",
+  "已删除队友": "Teammate removed",
+  "已移交群主": "Host transferred",
+  "请先选择要删除的队友": "Select the teammate to remove first",
+  "请先选择要移交的队友": "Select the teammate to receive the host first",
+  "添加失败，请稍后重试": "Failed to add, please try again later",
+  "删除失败，请稍后重试": "Failed to remove, please try again later",
+  "移交失败，请稍后重试": "Failed to transfer host, please try again later"
 }

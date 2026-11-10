@@ -39,11 +39,6 @@
             <icon-plus :size="18" aria-hidden="true" />
           </button>
         </el-tooltip>
-        <el-tooltip :content="translate('加入群聊')" placement="bottom" :show-after="100">
-          <button class="roomAction" type="button" :disabled="!ready" :aria-label="translate('加入群聊')" @click="joinVisible = true">
-            <icon-link :size="18" aria-hidden="true" />
-          </button>
-        </el-tooltip>
       </div>
     </header>
 
@@ -120,28 +115,66 @@
     </div>
 
     <footer class="chatComposer">
-      <!-- ACT: 团队弹层：只读列出房间编排客服与已启用团队（含成员分工）；遮罩层点外关闭。 -->
+      <!-- ACT: 团队弹层：花名册（缩小头像+昵称三色）+ 添加/删除队友（两段式确认）；遮罩层点外关闭。 -->
       <div v-if="teamVisible" class="teamBackdrop" @click="teamVisible = false"></div>
       <div v-if="teamVisible" class="teamPopover" role="dialog" :aria-label="translate('团队')">
         <header class="teamPopoverTitle">{{ translate("团队") }}</header>
         <ul class="teamList">
-          <li class="teamItem">
-            <span class="teamName">{{ translate("房间编排客服") }}</span>
-            <span class="teamDesc">{{ translate("驻守本群聊：理解消息、编排团队、投递成果与回执。") }}</span>
-          </li>
-          <li v-for="item in teams" :key="item.name" class="teamItem">
-            <span class="teamName">{{ item.displayName }}</span>
-            <span class="teamDesc">{{ item.description }}</span>
-            <ul v-if="item.members.length" class="memberList">
-              <li v-for="member in item.members" :key="member.name">
-                <span class="memberName">{{ member.name }}</span>
-                <span class="teamDesc">{{ member.description }}</span>
-              </li>
-            </ul>
+          <li v-for="member in teamMembers" :key="member.userId" class="teamMember">
+            <!-- ACT: 删除/移交流程共用行左单选 radio：删除模式禁选主持人与 AI 客服，移交模式禁选自己。 -->
+            <input
+              v-if="deleteMode || transferMode"
+              type="radio"
+              name="teamPick"
+              :disabled="pickDisabled(member)"
+              :checked="pickTarget === member.userId"
+              :aria-label="member.name"
+              @change="onPick(member.userId)" />
+            <span class="memberAvatar">
+              <img v-if="member.avatar" :src="member.avatar" :alt="member.name" />
+              <span v-else class="memberInitial">{{ member.name.charAt(0) }}</span>
+            </span>
+            <!-- ACT: 昵称三色：主持橙；已连接默认色；未连接 50% 减淡（上线后回默认色）。 -->
+            <span class="memberName" :class="{ host: member.host, offline: !member.online }">{{ member.name }}</span>
           </li>
         </ul>
-        <p v-if="teamLoading" class="teamEmpty">{{ translate("加载中…") }}</p>
-        <p v-else-if="!teams.length" class="teamEmpty">{{ translate("暂无已启用团队") }}</p>
+        <p v-if="!teamMembers.length" class="teamEmpty">{{ translate("暂无队友") }}</p>
+        <!-- ACT: 添加流程输入区：重名候选头像行 / 不存在警告都挂在输入框下方。 -->
+        <div v-if="addMode" class="teamAdd">
+          <input
+            v-model="addInput"
+            class="addInput"
+            type="text"
+            :placeholder="addPlaceholder"
+            :aria-label="translate('输入用户 ID')"
+            @input="addNotice = ''"
+            @keydown.enter.prevent="onAddButton" />
+          <p v-if="addNotice" class="addError">{{ addNoticeText }}</p>
+          <div v-if="candidateViews.length" class="candidateRow">
+            <button
+              v-for="item in candidateViews"
+              :key="item.userId"
+              type="button"
+              class="candidate"
+              :title="`${item.name} (${item.userId})`"
+              @click="pickCandidate(item)">
+              <img v-if="item.avatar" :src="item.avatar" :alt="item.name" />
+              <span v-else class="memberInitial">{{ item.name.charAt(0) }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="teamActions">
+          <button type="button" class="teamAction" :disabled="!ready || !activeRoomId || addBusy" @click="onAddButton">
+            {{ addLabel }}
+          </button>
+          <button type="button" class="teamAction danger" :disabled="!ready || !activeRoomId || addBusy" @click="onDeleteButton">
+            {{ deleteLabel }}
+          </button>
+          <!-- ACT: 「移交群主」仅当前主持人可见：两段式，与添加/删除互斥。 -->
+          <button v-if="isHost" type="button" class="teamAction" :disabled="!ready || !activeRoomId || addBusy" @click="onTransferButton">
+            {{ transferLabel }}
+          </button>
+        </div>
       </div>
       <!-- ACT: 发送前引用预览条：输入框上方灰底一条展示被引用消息，可点 × 取消。 -->
       <div v-if="pendingQuote" class="quotePreview">
@@ -177,14 +210,11 @@
       </div>
     </footer>
 
-    <!-- 新建群聊：名称 + 可选邀请成员 -->
+    <!-- 新建群聊：仅群名 + 创建/取消（邀请改由 Team 弹层的添加队友完成） -->
     <el-dialog v-model="createVisible" :title="translate('新建群聊')" width="min(420px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false">
       <el-form class="roomForm" label-position="top" @submit.prevent="submitCreate">
         <el-form-item :label="translate('群聊名称')">
           <el-input v-model="createName" maxlength="60" :disabled="actionBusy" :placeholder="translate('例如：我的剧组')" @keydown.enter="submitCreate" />
-        </el-form-item>
-        <el-form-item :label="translate('邀请成员')">
-          <el-input v-model="createInvite" :disabled="actionBusy" :placeholder="translate('用户名以逗号分隔，例如 friend1, friend2')" @keydown.enter="submitCreate" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -194,28 +224,12 @@
         </div>
       </template>
     </el-dialog>
-
-    <!-- 加入群聊：房间 ID 或别名 -->
-    <el-dialog v-model="joinVisible" :title="translate('加入群聊')" width="min(420px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false">
-      <el-form class="roomForm" label-position="top" @submit.prevent="submitJoin">
-        <el-form-item :label="translate('房间 ID 或别名')">
-          <el-input v-model="joinTarget" :disabled="actionBusy" placeholder="!xxxx:localhost / #name:localhost" @keydown.enter="submitJoin" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div class="dialogFooter">
-          <el-button :disabled="actionBusy" @click="joinVisible = false">{{ translate("取消") }}</el-button>
-          <el-button type="primary" :loading="actionBusy" :disabled="!joinTarget.trim()" @click="submitJoin">{{ translate("加入") }}</el-button>
-        </div>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import axios from "axios";
 import { ElMessage, type ScrollbarInstance } from "element-plus";
 import { translate } from "@toonflow/i18n/vue";
 // ACT: 工具按钮图标统一取自 src/icons（CSS mask + currentColor 着色，与全局外壳一致）。
@@ -223,7 +237,7 @@ import iconUserGroup from "@/icons/user_group.svg";
 import iconFileUpload from "@/icons/file_upload.svg";
 import { previewKind } from "@/utils/textPreview";
 import { useAuthStore } from "@/stores/auth";
-import { useMatrixChat, type ChatMessage } from "@/composables/useMatrixChat";
+import { useMatrixChat, type ChatMessage, type TeamMember } from "@/composables/useMatrixChat";
 
 // ACT: 可复用的「房间时间线聊天框」（计划 Task 3）。它是 Chat 页与 Studio 页共用的同一个组件，
 // 只渲染 Matrix 房间时间线 + 输入区，不含模型选择器/提及/工具气泡——customer_service（服务器侧
@@ -252,8 +266,9 @@ const route = useRoute();
 const auth = useAuthStore();
 const {
   ready, connecting, error: chatError, joinedRooms, invites,
-  activeRoomId, isHost, timeline, typingNames, pendingQuote,
-  bootstrap, setActiveRoom, createRoom, joinRoom, acceptInvite,
+  activeRoomId, isHost, myUserId, timeline, typingNames, pendingQuote,
+  teamMembers, inviteTeammate, kickTeammate, transferHost, searchUsers, mediaUrl,
+  bootstrap, setActiveRoom, createRoom, acceptInvite,
   sendText, sendFile, deleteMessage, noteTyping,
 } = useMatrixChat();
 
@@ -262,9 +277,6 @@ const scroller = ref<ScrollbarInstance>();
 const fileInput = ref<HTMLInputElement>();
 const createVisible = ref(false);
 const createName = ref("");
-const createInvite = ref("");
-const joinVisible = ref(false);
-const joinTarget = ref("");
 const busyRoom = ref("");
 const actionBusy = ref(false);
 // 当前在视频舞台选中的消息（仅用于卡片高亮）；真正的播放由页面处理。
@@ -445,46 +457,17 @@ async function send() {
   }
 }
 
-// 把 host / @host / @host:localhost 统一补成完整 Matrix ID（邀请成员用）。
-function toMxid(input: string) {
-  const name = input.trim();
-  if (!name) return "";
-  if (name.startsWith("@")) return name;
-  if (name.includes(":")) return `@${name}`;
-  const serverName = auth.myUserId.split(":")[1] || "localhost";
-  return `@${name}:${serverName}`;
-}
-
 async function submitCreate() {
   if (actionBusy.value || !createName.value.trim()) return;
   actionBusy.value = true;
   try {
-    await createRoom({
-      name: createName.value,
-      invite: createInvite.value.split(/[,，\s]+/).map(toMxid).filter(Boolean),
-    });
+    await createRoom({ name: createName.value });
     createVisible.value = false;
     createName.value = "";
-    createInvite.value = "";
     ElMessage.success("群聊已创建");
     await scrollToBottom();
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : "创建群聊失败");
-  } finally {
-    actionBusy.value = false;
-  }
-}
-
-async function submitJoin() {
-  if (actionBusy.value || !joinTarget.value.trim()) return;
-  actionBusy.value = true;
-  try {
-    await joinRoom(joinTarget.value);
-    joinVisible.value = false;
-    joinTarget.value = "";
-    await scrollToBottom();
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : "加入群聊失败");
   } finally {
     actionBusy.value = false;
   }
@@ -503,37 +486,182 @@ async function accept(roomId: string) {
   }
 }
 
-// ── 团队弹层：只读列出房间编排客服与已启用团队（含成员分工） ──
-type TeamMemberInfo = { name: string; description: string };
-type TeamInfo = { name: string; displayName: string; description: string; members: TeamMemberInfo[] };
+// ── 团队弹层：花名册（头像+昵称三色）+ 添加/删除队友（每次一人，两段式确认） ──
 const teamVisible = ref(false);
-const teamLoading = ref(false);
-const teams = ref<TeamInfo[]>([]);
+// ACT: 添加/删除互斥的两段流：首次点进输入/单选模式且按钮变「确认」，再点执行。
+const addMode = ref(false);
+const deleteMode = ref(false);
+const transferMode = ref(false);
+const addInput = ref("");
+// ACT: 输入框下方内联警告：missing＝该队友不存在；inteam＝该队友已在团队中（含直接输入主持人 ID 的情形）。
+const addNotice = ref<"" | "missing" | "inteam">("");
+const addBusy = ref(false);
+const deleteTarget = ref("");
+const transferTarget = ref("");
+// ACT: 删除/移交共用的单选态：按当前模式读写各自的 target。
+const pickTarget = computed(() => (deleteMode.value ? deleteTarget.value : transferTarget.value));
+function pickDisabled(member: TeamMember) {
+  // ACT: 删除保护＝当前主持人（卸任后可删）+ AI 客服；移交保护＝自己 + AI 客服（群主不能交给 bot）。
+  if (deleteMode.value) return member.host || member.bot;
+  return member.bot || member.userId === myUserId.value;
+}
+function onPick(userId: string) {
+  if (deleteMode.value) deleteTarget.value = userId;
+  else if (transferMode.value) transferTarget.value = userId;
+}
+type AddCandidate = { userId: string; name: string; avatarMxc: string };
+const addCandidates = ref<AddCandidate[]>([]);
+// ACT: i18n 抽取器只认 translate(纯字符串)；三元标签统一在 computed 里拆成两次直调，保证词条入字典。
+const addPlaceholder = computed(() => (addCandidates.value.length ? translate("请选择正确的队友") : translate("输入用户 ID")));
+const addNoticeText = computed(() => (addNotice.value === "inteam" ? translate("该队友已在团队中") : translate("该队友不存在")));
+const addLabel = computed(() => (addMode.value ? translate("确认") : translate("添加队友")));
+const deleteLabel = computed(() => (deleteMode.value ? translate("确认") : translate("删除队友")));
+const transferLabel = computed(() => (transferMode.value ? translate("确认") : translate("移交群主")));
+// ACT: 候选头像同属鉴权媒体：经 mediaUrl 读缓存（依赖 mediaTick），blob 落地后自动补图。
+const candidateViews = computed(() => addCandidates.value.map(item => ({ ...item, avatar: mediaUrl(item.avatarMxc) })));
 
 function team() {
   teamVisible.value = !teamVisible.value;
-  if (teamVisible.value) void loadTeams();
+  if (!teamVisible.value) resetTeamFlow();
 }
 
-async function loadTeams() {
-  teamLoading.value = true;
+function resetTeamFlow() {
+  addMode.value = false;
+  deleteMode.value = false;
+  transferMode.value = false;
+  addInput.value = "";
+  addNotice.value = "";
+  addCandidates.value = [];
+  deleteTarget.value = "";
+  transferTarget.value = "";
+}
+
+// ACT: 「添加队友」两段：首次点展开输入框（按钮变「确认」），再点按用户 ID/昵称解析添加。
+function onAddButton() {
+  if (!addMode.value) {
+    resetTeamFlow();
+    addMode.value = true;
+    return;
+  }
+  void confirmAdd();
+}
+
+// ACT: 账户页展示的用户 ID 是裸本地名（无 @ 与 :server）；添加队友时允许原样粘贴：
+// 无 @ 前缀时按当前服务器域合成完整 mxid，两者一起进比较集合。
+function idAliases(term: string): string[] {
+  if (term.startsWith("@")) return [term];
+  const server = myUserId.value.split(":").slice(1).join(":");
+  return server ? [term, `@${term}:${server}`] : [term];
+}
+
+async function confirmAdd() {
+  const term = addInput.value.trim();
+  if (!term || addBusy.value) return;
+  const ids = idAliases(term);
+  // ACT: 已是成员（含主持人自己）不走用户目录：目录可能漏索引导致误报「不存在」，直接内联报「已在团队中」。
+  if (teamMembers.value.some(member => ids.includes(member.userId) || member.name === term)) {
+    addCandidates.value = [];
+    addNotice.value = "inteam";
+    return;
+  }
+  addBusy.value = true;
   try {
-    const { data } = await axios.get("/api/agents/get");
-    const agents = data?.code === 200 && Array.isArray(data.data?.agents) ? (data.data.agents as Record<string, unknown>[]) : [];
-    teams.value = agents
-      .filter(agent => agent.enabled === true)
-      .map(agent => ({
-        name: String(agent.name ?? ""),
-        displayName: String(agent.displayName ?? agent.name ?? ""),
-        description: String(agent.description ?? ""),
-        members: Array.isArray(agent.members)
-          ? (agent.members as Record<string, unknown>[]).map(member => ({ name: String(member.name ?? ""), description: String(member.description ?? "") }))
-          : [],
-      }));
-  } catch {
-    teams.value = [];
+    const results = await searchUsers(term);
+    // ACT: 唯一命中＝用户 ID 精确匹配（裸名或全 mxid）或昵称精确匹配仅一人；重名多人给头像候选；零命中报「该队友不存在」。
+    const matches = [...new Map(results.filter(item => ids.includes(item.userId) || item.name === term).map(item => [item.userId, item])).values()];
+    if (matches.length === 1) {
+      const target = matches[0];
+      if (teamMembers.value.some(member => member.userId === target.userId)) {
+        addNotice.value = "inteam";
+      } else {
+        await inviteTeammate(target.userId);
+        ElMessage.success(translate("已添加队友"));
+        resetTeamFlow();
+      }
+    } else if (matches.length > 1) {
+      addCandidates.value = matches;
+      addNotice.value = "";
+    } else {
+      addCandidates.value = [];
+      addNotice.value = "missing";
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : translate("添加失败，请稍后重试"));
   } finally {
-    teamLoading.value = false;
+    addBusy.value = false;
+  }
+}
+
+// ACT: 重名候选：点谁就按谁的用户 ID 邀请，添加后收回输入模式。
+async function pickCandidate(item: AddCandidate) {
+  if (addBusy.value) return;
+  addBusy.value = true;
+  try {
+    await inviteTeammate(item.userId);
+    ElMessage.success(translate("已添加队友"));
+    resetTeamFlow();
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : translate("添加失败，请稍后重试"));
+  } finally {
+    addBusy.value = false;
+  }
+}
+
+// ACT: 「删除队友」两段：首次点给花名册每行挂单选 radio（按钮变「确认」），再点踢出选中成员。
+function onDeleteButton() {
+  if (!deleteMode.value) {
+    resetTeamFlow();
+    deleteMode.value = true;
+    return;
+  }
+  if (!deleteTarget.value) {
+    ElMessage.warning(translate("请先选择要删除的队友"));
+    return;
+  }
+  void confirmDelete();
+}
+
+async function confirmDelete() {
+  const target = deleteTarget.value;
+  if (!target || addBusy.value) return;
+  addBusy.value = true;
+  try {
+    await kickTeammate(target);
+    ElMessage.success(translate("已删除队友"));
+    resetTeamFlow();
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : translate("删除失败，请稍后重试"));
+  } finally {
+    addBusy.value = false;
+  }
+}
+
+// ACT: 「移交群主」两段（仅主持人可见）：首次点给花名册挂单选 radio（按钮变「确认」），再点提目标到 100 并自降为 0。
+function onTransferButton() {
+  if (!transferMode.value) {
+    resetTeamFlow();
+    transferMode.value = true;
+    return;
+  }
+  if (!transferTarget.value) {
+    ElMessage.warning(translate("请先选择要移交的队友"));
+    return;
+  }
+  void confirmTransfer();
+}
+
+async function confirmTransfer() {
+  const target = transferTarget.value;
+  if (!target || addBusy.value) return;
+  addBusy.value = true;
+  try {
+    await transferHost(target);
+    ElMessage.success(translate("已移交群主"));
+    resetTeamFlow();
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : translate("移交失败，请稍后重试"));
+  } finally {
+    addBusy.value = false;
   }
 }
 
@@ -990,44 +1118,144 @@ void props;
     .teamList {
       display: flex;
       flex-direction: column;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    // ACT: 花名册行：删除流程的行左 radio + 缩小圆头像 + 昵称；昵称三色见 .memberName。
+    .teamMember {
+      display: flex;
+      align-items: center;
       gap: 8px;
+
+      input[type="radio"] {
+        margin: 0;
+        accent-color: var(--el-color-primary);
+      }
     }
 
-    .teamItem {
+    .memberAvatar {
       display: flex;
-      flex-direction: column;
-      gap: 2px;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: var(--el-fill-color);
+
+      img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
     }
 
-    .teamName {
-      font-size: 13px;
-      color: var(--el-text-color-primary);
-    }
-
-    .teamDesc {
-      font-size: 12px;
-      line-height: 1.5;
+    .memberInitial {
+      font-size: 11px;
       color: var(--el-text-color-secondary);
-    }
-
-    .memberList {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin-top: 4px;
-      padding-left: 10px;
-      border-left: 2px solid var(--el-border-color-lighter);
     }
 
     .memberName {
-      font-size: 12px;
-      color: var(--el-text-color-regular);
+      min-width: 0;
+      overflow: hidden;
+      font-size: 13px;
+      color: var(--el-text-color-primary);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      // ACT: 主持橙取主题警告色；未连接＝默认色 50% 减淡（color-mix 半透明），上线后回默认色。
+      &.host { color: var(--el-color-warning); }
+      &.offline { color: color-mix(in srgb, var(--el-text-color-primary) 50%, transparent); }
     }
 
     .teamEmpty {
-      margin-top: 6px;
+      margin: 6px 0 0;
       font-size: 12px;
       color: var(--el-text-color-secondary);
+    }
+
+    // ACT: 添加流程：输入框 + 不存在警告 + 重名候选头像行（圆形可点，点谁加谁）。
+    .teamAdd {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .addInput {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--el-border-color);
+      border-radius: 6px;
+      background: var(--el-bg-color);
+      color: var(--el-text-color-primary);
+      font-size: 12px;
+      outline: none;
+
+      &:focus { border-color: var(--el-color-primary); }
+    }
+
+    .addError {
+      margin: 0;
+      font-size: 12px;
+      color: var(--el-color-danger);
+    }
+
+    .candidateRow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .candidate {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--el-border-color);
+      border-radius: 50%;
+      overflow: hidden;
+      background: var(--el-fill-color);
+      cursor: pointer;
+
+      img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      &:hover { border-color: var(--el-color-primary); }
+    }
+
+    // ACT: 两个动作按钮竖排撑满；删除为危险操作红字提示。
+    .teamActions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .teamAction {
+      padding: 6px 10px;
+      border: 1px solid var(--el-border-color);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--el-text-color-regular);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+
+      &:hover:not(:disabled) { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+      &.danger { color: var(--el-color-danger); }
     }
   }
 

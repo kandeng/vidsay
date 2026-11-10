@@ -53,12 +53,9 @@
                 </dd>
               </div>
               <div class="profileRow">
+                <!-- ACT: 用户 ID 只展示裸本地名（站点账号名）；@ 与 :server 是 Matrix 路由后缀，不属于用户 ID，不展示。 -->
                 <dt>{{ translate("用户 ID") }}</dt>
-                <dd class="mono">{{ auth.myUserId }}</dd>
-              </div>
-              <div class="profileRow">
-                <dt>{{ translate("设备 ID") }}</dt>
-                <dd class="mono">{{ auth.deviceId || translate("未知") }}</dd>
+                <dd class="mono">{{ localpartOf(auth.myUserId) }}</dd>
               </div>
             </dl>
 
@@ -129,7 +126,7 @@ import { ElMessage } from "element-plus";
 import { translate } from "@toonflow/i18n/vue";
 import loginDialog from "@/components/loginDialog.vue";
 import iconAccount from "@/icons/user.svg";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore, localpartOf } from "@/stores/auth";
 
 // ACT: 账户页：设置页同款整页布局（左菜单栏 + 右扁平主面板），主面板内含「账户/钱包/账单」三个锚点段落。
 // 头像上传后在本地裁剪/缩放为 128x128 的 data URI（对齐 drone 的头像处理），保存时经 updateProfile 同步到 Matrix。

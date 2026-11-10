@@ -3977,9 +3977,6 @@
   "新建群聊": [
     "apps/web/src/components/groupChat.vue"
   ],
-  "加入群聊": [
-    "apps/web/src/components/groupChat.vue"
-  ],
   "还没有群聊，点右上角新建一个。": [
     "apps/web/src/components/groupChat.vue"
   ],
@@ -4001,16 +3998,10 @@
     "apps/web/src/components/groupChat.vue",
     "apps/server/src/utils/plugins/install.ts"
   ],
-  "房间编排客服": [
+  "暂无队友": [
     "apps/web/src/components/groupChat.vue"
   ],
-  "驻守本群聊：理解消息、编排团队、投递成果与回执。": [
-    "apps/web/src/components/groupChat.vue"
-  ],
-  "加载中…": [
-    "apps/web/src/components/groupChat.vue"
-  ],
-  "暂无已启用团队": [
+  "输入用户 ID": [
     "apps/web/src/components/groupChat.vue"
   ],
   "取消引用": [
@@ -4032,15 +4023,6 @@
     "apps/web/src/components/groupChat.vue"
   ],
   "例如：我的剧组": [
-    "apps/web/src/components/groupChat.vue"
-  ],
-  "邀请成员": [
-    "apps/web/src/components/groupChat.vue"
-  ],
-  "用户名以逗号分隔，例如 friend1, friend2": [
-    "apps/web/src/components/groupChat.vue"
-  ],
-  "房间 ID 或别名": [
     "apps/web/src/components/groupChat.vue"
   ],
   "已复制到剪贴板": [
@@ -4065,6 +4047,49 @@
     "apps/web/src/components/groupChat.vue"
   ],
   "加入群聊失败": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "请选择正确的队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "该队友已在团队中": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "该队友不存在": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "确认": [
+    "apps/web/src/components/groupChat.vue",
+    "apps/web/src/lib/i18n.ts"
+  ],
+  "添加队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "删除队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "移交群主": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "已添加队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "添加失败，请稍后重试": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "请先选择要删除的队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "已删除队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "请先选择要移交的队友": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "已移交群主": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "移交失败，请稍后重试": [
     "apps/web/src/components/groupChat.vue"
   ],
   "上传失败，请稍后重试": [
@@ -4239,9 +4264,6 @@
     "apps/web/src/pages/account/index.vue"
   ],
   "用户 ID": [
-    "apps/web/src/pages/account/index.vue"
-  ],
-  "设备 ID": [
     "apps/web/src/pages/account/index.vue"
   ],
   "你的邮箱尚未验证": [
@@ -6040,9 +6062,6 @@
     "apps/web/src/lib/i18n.ts"
   ],
   "下一个": [
-    "apps/web/src/lib/i18n.ts"
-  ],
-  "确认": [
     "apps/web/src/lib/i18n.ts"
   ],
   "错误": [

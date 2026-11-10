@@ -90,10 +90,18 @@ const invites = computed(() => rooms.value.filter(room => room.invited));
 const mediaCache = new Map<string, string>(); // mxc -> blobUrl（"" 表示解析失败，不再重试）
 const mediaPending = new Set<string>();
 const objectUrls = new Set<string>();
+// ACT: 媒体解析完成计数器：computed/模板里经 mediaUrl() 读取缓存时依赖它，blob 落地后自动重渲染。
+const mediaTick = ref(0);
 
 // 同步读取已解析的 blob 地址；未解析或失败返回空串。
 function cachedMediaUrl(mxc: unknown): string {
   return typeof mxc === "string" && mxc.startsWith("mxc://") ? mediaCache.get(mxc) ?? "" : "";
+}
+
+// ACT: 响应式媒体读取：头像等在 blob 解析完成后需要重渲染的消费方走这里（依赖 mediaTick）。
+function mediaUrl(mxc: unknown): string {
+  void mediaTick.value;
+  return cachedMediaUrl(mxc);
 }
 
 // 异步解析单个 mxc 媒体；完成后刷新时间线（此时缓存已命中，不会重复触发）。
@@ -107,7 +115,7 @@ function resolveMedia(mxc: string) {
     .then(resp => { if (!resp.ok) throw new Error(`media HTTP ${resp.status}`); return resp.blob(); })
     .then(blob => { const objectUrl = URL.createObjectURL(blob); objectUrls.add(objectUrl); mediaCache.set(mxc, objectUrl); })
     .catch(err => { console.warn("[matrix] 媒体解析失败:", mxc, err); mediaCache.set(mxc, ""); })
-    .finally(() => { mediaPending.delete(mxc); safe(() => { refreshTimeline(); refreshVideos(); }); });
+    .finally(() => { mediaPending.delete(mxc); safe(() => { refreshTimeline(); refreshVideos(); mediaTick.value++; }); });
 }
 
 /* ─── 房间与时间线映射 ─── */
@@ -289,6 +297,21 @@ function wireEvents(c: sdk.MatrixClient) {
   c.on(sdk.RoomMemberEvent.Typing, (_event, member) => safe(() => {
     if (member.roomId === activeRoomId.value) updateTyping(c.getRoom(activeRoomId.value) ?? null);
   }));
+  // ACT: 成员进出（invite/kick/leave）、在线状态、改名/换头像都实时刷新团队弹层花名册。
+  c.on(sdk.RoomMemberEvent.Membership, (_event, member) => safe(() => {
+    if (member.roomId === activeRoomId.value) { membersTick.value++; refreshRooms(); }
+  }));
+  // ACT: v42 的 presence 挂在 User 对象上（UserEvent.Presence）；只在该用户属于当前房间时刷花名册。
+  c.on(sdk.UserEvent.Presence, (_event, user) => safe(() => {
+    if (activeRoomId.value && c.getRoom(activeRoomId.value)?.getMember(user.userId)) membersTick.value++;
+  }));
+  c.on(sdk.RoomMemberEvent.Name, (_event, member) => safe(() => {
+    if (member.roomId === activeRoomId.value) membersTick.value++;
+  }));
+  // ACT: v42 没有 PowerLevel 枚举；状态批次更新（RoomStateEvent.Update，含权限级变化）驱动花名册与 isHost 重算。
+  c.on(sdk.RoomStateEvent.Update, room => safe(() => {
+    if (room?.roomId === activeRoomId.value) membersTick.value++;
+  }));
   c.on(sdk.RoomEvent.Name, room => safe(() => {
     if (room?.roomId === activeRoomId.value || rooms.value.some(item => item.id === room?.roomId)) refreshRooms();
   }));
@@ -359,6 +382,7 @@ async function bootstrap(): Promise<boolean> {
       pickInitialRoom();
       refreshTimeline();
       refreshVideos();
+      void loadBotUserId();
       return true;
     } catch (err) {
       console.error("[matrix] bootstrap failed:", err);
@@ -553,6 +577,47 @@ async function sendFile(file: File) {
   refreshRooms();
 }
 
+// ACT: 团队弹层「添加队友」：把用户邀请进当前房间；membership 事件会让花名册实时补人。
+async function inviteTeammate(userId: string) {
+  if (!client || !activeRoomId.value) throw new Error(translate("尚未连接到聊天服务"));
+  const invite = client.invite.bind(client) as unknown as (roomId: string, userId: string) => Promise<unknown>;
+  await invite(activeRoomId.value, userId);
+  membersTick.value++;
+  refreshRooms();
+}
+
+// ACT: 团队弹层「删除队友」：把成员踢出当前房间；服务端按权限校验（非主持人会 403）。
+async function kickTeammate(userId: string) {
+  if (!client || !activeRoomId.value) throw new Error(translate("尚未连接到聊天服务"));
+  const kick = client.kick.bind(client) as unknown as (roomId: string, userId: string, reason?: string) => Promise<unknown>;
+  await kick(activeRoomId.value, userId);
+  membersTick.value++;
+  refreshRooms();
+}
+
+// ACT: 团队弹层「移交群主」：先提目标到 100 再把自己降回 0——先降自己就没有权限再提别人了。
+async function transferHost(userId: string) {
+  if (!client || !activeRoomId.value) throw new Error(translate("尚未连接到聊天服务"));
+  const setPowerLevel = client.setPowerLevel.bind(client) as unknown as (roomId: string, userId: string, powerLevel: number) => Promise<unknown>;
+  await setPowerLevel(activeRoomId.value, userId, 100);
+  const me = client.getUserId();
+  if (me && me !== userId) await setPowerLevel(activeRoomId.value, me, 0);
+  membersTick.value++;
+}
+
+// ACT: 团队弹层候选搜索：Synapse 用户目录，对用户 ID 与昵称都做匹配；头像 mxc 交由消费方解析。
+export type UserCandidate = { userId: string; name: string; avatarMxc: string };
+async function searchUsers(term: string): Promise<UserCandidate[]> {
+  if (!client) throw new Error(translate("尚未连接到聊天服务"));
+  const search = client.searchUserDirectory.bind(client) as unknown as (opts: { term: string; limit?: number }) => Promise<{ results?: { user_id: string; display_name?: string | null; avatar_url?: string | null }[] }>;
+  const resp = await search({ term, limit: 50 });
+  return (resp.results ?? []).map(item => ({
+    userId: item.user_id,
+    name: item.display_name || item.user_id,
+    avatarMxc: typeof item.avatar_url === "string" ? item.avatar_url : "",
+  }));
+}
+
 let typingTimer: ReturnType<typeof setTimeout> | null = null;
 function noteTyping() {
   if (!client || !activeRoomId.value) return;
@@ -579,11 +644,64 @@ const roomName = computed(() => {
   const id = activeRoomId.value;
   return rooms.value.find(room => room.id === id)?.name || activeRoom.value?.name || id;
 });
-// ACT: 主持人＝当前房间的创建者（m.room.create 的发送者）；只有主持人才看到生成视频入口。
+// ACT: 主持人＝当前房间内权限级 ≥100 的自己（移交群主后随 PowerLevel 事件转移）；
+// 缺失成员记录的古怪房回落到 m.room.create 发送者判定。
 const isHost = computed(() => {
+  void membersTick.value;
   const room = activeRoom.value;
   if (!room || !myUserId.value) return false;
+  const me = room.getMember(myUserId.value);
+  if (me) return me.powerLevel >= 100;
   return room.currentState.getStateEvents("m.room.create", "")?.getSender() === myUserId.value;
+});
+
+/* ─── 团队花名册（Team 弹层） ───
+ * ACT: 成员＝当前房间 join+invite 两种 membership；主持人＝权限级 ≥100 者（新房即创建者），
+ * 无人 ≥100 的异常房回落到 m.room.create 发送者。bot 标记 AI 客服（/api/matrix/status 的 botUserId），
+ * 花名册里与主持人一样不可被删除。online 取 Matrix presence（User 对象），
+ * 弹层据此三色渲染昵称：主持橙 / 已连接默认色 / 未连接半透明（上线后回默认色）。
+ */
+export type TeamMember = { userId: string; name: string; avatar: string; host: boolean; bot: boolean; online: boolean };
+const membersTick = ref(0);
+// ACT: AI 客服的 mxid 由服务端配置（synapse.botUserId）经 /api/matrix/status 下发；拉取失败置空，仅失去删除保护。
+const botUserId = ref("");
+async function loadBotUserId() {
+  try {
+    const { data } = await axios.get("/api/matrix/status");
+    const id = (data?.data ?? data)?.botUserId;
+    botUserId.value = typeof id === "string" ? id : "";
+  } catch {
+    botUserId.value = "";
+  }
+  membersTick.value++;
+}
+const teamMembers = computed<TeamMember[]>(() => {
+  void membersTick.value;
+  const room = activeRoom.value;
+  if (!room) return [];
+  const roster = room.getMembers().filter(member => member.membership === "join" || member.membership === "invite");
+  const hostIds = new Set(roster.filter(member => member.powerLevel >= 100).map(member => member.userId));
+  if (!hostIds.size) {
+    const creator = room.currentState.getStateEvents("m.room.create", "")?.getSender() ?? "";
+    if (creator) hostIds.add(creator);
+  }
+  const me = myUserId.value;
+  return roster
+    .map(member => {
+      const avatarMxc = member.getMxcAvatarUrl() ?? "";
+      if (avatarMxc && !mediaCache.has(avatarMxc)) resolveMedia(avatarMxc);
+      const presence = member.user?.presence ?? client?.getUser(member.userId)?.presence;
+      return {
+        userId: member.userId,
+        name: member.name || member.userId,
+        avatar: mediaUrl(avatarMxc),
+        host: hostIds.has(member.userId),
+        bot: member.userId === botUserId.value,
+        // ACT: presence 事件不一定覆盖自己；已登录且能看到房间即视为已连接。
+        online: presence === "online" || (member.userId === me && ready.value),
+      };
+    })
+    .sort((a, b) => Number(b.host) - Number(a.host));
 });
 
 export function useMatrixChat() {
@@ -591,6 +709,7 @@ export function useMatrixChat() {
     ready, connecting, error, myUserId,
     rooms, joinedRooms, invites, activeRoomId, roomName, isHost,
     timeline, videos, typingNames, pendingQuote,
+    teamMembers, inviteTeammate, kickTeammate, transferHost, searchUsers, mediaUrl,
     bootstrap, teardown, refreshRooms,
     setActiveRoom, createRoom, joinRoom, acceptInvite,
     sendText, sendImage, sendFile, deleteMessage, noteTyping, markRead,
