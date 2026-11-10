@@ -87,7 +87,8 @@ export function createVideoTrigger(client: sdk.MatrixClient, botUserId: string):
         // ACT: 视频是 msgtype=m.video 的 m.room.message 事件（并非独立事件类型）。
         // matrix-js-sdk v42 按 msgtype 严格约束 content 形状（且 sendEvent 多重载），
         // 自定义 description 字段只能把 sendEvent 断言成宽松签名后传入。
-        const sendRoomMessage = client.sendEvent as unknown as (
+        // ACT: 必须 .bind(client)：v42 的 sendEvent 内部依赖 this，解构会丢失 this 抛 TypeError。
+        const sendRoomMessage = client.sendEvent.bind(client) as unknown as (
           roomId: string, eventType: string, content: Record<string, unknown>,
         ) => Promise<unknown>;
         await sendRoomMessage(roomId, sdk.EventType.RoomMessage, {

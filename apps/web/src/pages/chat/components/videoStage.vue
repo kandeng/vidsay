@@ -6,6 +6,9 @@ import { useMatrixChat } from "@/composables/useMatrixChat";
 // ACT: 播放/暂停字形取自 src/icons 的描边 SVG（与画笔工具箱同 1.9 描边），经 mask + currentColor 着色。
 import iconVideoPlay from "@/icons/video_play.svg";
 import iconVideoPause from "@/icons/video_pause.svg";
+// ACT: 图片模式控制条的缩小/放大字形：用户指定的 iconfont 实心 SVG，同样走 mask + currentColor。
+import iconZoomOut from "@/icons/zoom_out.svg";
+import iconZoomIn from "@/icons/zoom_in.svg";
 // ACT: 无视频空态插画改用胶片图标：经 mask + 分隔线同色渲染，宽度仍为 el-empty 默认 160px。
 import iconEmptyFilm from "@/icons/canvas_film.svg";
 
@@ -14,7 +17,7 @@ import iconEmptyFilm from "@/icons/canvas_film.svg";
 // 面板缩放不丢笔迹；截图时把视频帧与画笔层合成一张 PNG（同源 blob 不污染 canvas）。
 export type StageVideo = { id: string; url: string; name: string };
 
-const props = defineProps<{ items: StageVideo[]; modelValue: string }>();
+const props = defineProps<{ items: StageVideo[]; modelValue: string; playToken?: number; image?: { url: string; name: string } | null }>();
 const emit = defineEmits<{ "update:modelValue": [id: string] }>();
 
 const { ready, activeRoomId, sendImage } = useMatrixChat();
@@ -79,6 +82,105 @@ watch(current, () => {
   void nextTick(sizeInk);
 });
 
+// ACT: 右键菜单「播放」：playToken 递增时自动起播当前选中视频（仅响应变化，挂载不播）；
+// 换片与增 token 同帧发生时，nextTick 后 video 已换新 src，play() 由浏览器等待就绪。
+watch(() => props.playToken, token => {
+  if (!token || !current.value) return;
+  void nextTick(() => {
+    void videoRef.value?.play().catch(() => { playing.value = false; });
+  });
+});
+
+// ── 图片模式：时间线点击图片后与视频播放器同位展示 ──
+// ACT: 有 image 时舞台切换为图片展示：控制条只留缩小/放大两键（替换播放/暂停、滑杆与时间盒）并居中，
+// 画笔工具箱保留在控制条下方；最大显示窗（盒子）不画黑底不画边框，图片小于最大窗时按原生尺寸居中。
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 8;
+const ZOOM_STEP = 1.25;
+const zoom = ref(1);
+const panX = ref(0);
+const panY = ref(0);
+const panning = ref(false);
+const imageAspect = ref(16 / 9);
+// ACT: 基准缩放＝图片原生尺寸相对最大显示窗的 fitting 比（大于窗为 1，小于窗则<1 不放大）；
+// 缩放键的上下限按基准的倍数算，小图不会被允许放大到糊。
+const baseScale = ref(1);
+const zoomMin = computed(() => baseScale.value * ZOOM_MIN);
+const zoomMax = computed(() => baseScale.value * ZOOM_MAX);
+let panFrom = { x: 0, y: 0, ox: 0, oy: 0 };
+
+// ACT: 盒子宽高比：图片模式跟随图片原生比例（加载后回填），视频模式仍跟视频，空态不锁比例。
+const boxStyle = computed(() => {
+  if (props.image) return { aspectRatio: `${imageAspect.value}` };
+  return current.value ? { aspectRatio: `${aspect.value}` } : null;
+});
+
+function onImageLoad(event: Event) {
+  const img = event.target as HTMLImageElement;
+  if (img.naturalWidth && img.naturalHeight) imageAspect.value = img.naturalWidth / img.naturalHeight;
+  // ACT: 盒子宽高比刚回填，等下一帧盒子按新比例重排后再量宽算基准缩放。
+  void nextTick(applyFit);
+}
+
+// ACT: 基准缩放：图片原生宽 / 最大显示窗宽，大于 1（图比窗大）时取 1 即 fitting 缩到窗内；
+// 用户没动过缩放时跟随基准（含窗口 resize），动过则只重新夹紧平移。
+function computeBaseScale() {
+  const box = boxRef.value;
+  const img = imageEl.value;
+  if (!box || !img || !box.clientWidth || !img.naturalWidth) return 1;
+  return Math.min(1, img.naturalWidth / box.clientWidth);
+}
+function applyFit() {
+  const base = computeBaseScale();
+  const untouched = Math.abs(zoom.value - baseScale.value) < 1e-6;
+  baseScale.value = base;
+  if (untouched) { zoom.value = base; panX.value = 0; panY.value = 0; }
+  else clampPan();
+}
+
+// ACT: 平移量夹紧到缩放溢出的范围，图片边缘不会拖出盒子露底；回到 1 倍时由 zoomBy 归零居中。
+function clampPan() {
+  const box = boxRef.value;
+  if (!box) return;
+  const maxX = Math.max(0, ((zoom.value - 1) * box.clientWidth) / 2);
+  const maxY = Math.max(0, ((zoom.value - 1) * box.clientHeight) / 2);
+  panX.value = Math.min(maxX, Math.max(-maxX, panX.value));
+  panY.value = Math.min(maxY, Math.max(-maxY, panY.value));
+}
+
+function zoomBy(factor: number) {
+  zoom.value = Math.min(zoomMax.value, Math.max(zoomMin.value, zoom.value * factor));
+  if (zoom.value <= 1) { panX.value = 0; panY.value = 0; }
+  else clampPan();
+}
+
+function panDown(event: PointerEvent) {
+  if (zoom.value <= 1) return;
+  event.preventDefault();
+  panning.value = true;
+  panFrom = { x: event.clientX, y: event.clientY, ox: panX.value, oy: panY.value };
+  (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+}
+function panMove(event: PointerEvent) {
+  if (!panning.value) return;
+  panX.value = panFrom.ox + (event.clientX - panFrom.x);
+  panY.value = panFrom.oy + (event.clientY - panFrom.y);
+  clampPan();
+}
+function panUp() { panning.value = false; }
+
+// ACT: 换图/收回图片都重置缩放、平移与笔迹（标记属于当前展示内容）；canvas 尺寸补测一次。
+watch(() => props.image, img => {
+  zoom.value = 1;
+  baseScale.value = 1;
+  panX.value = 0;
+  panY.value = 0;
+  panning.value = false;
+  if (img) imageAspect.value = 16 / 9;
+  clearMarks();
+  void nextTick(sizeInk);
+});
+
 // ── 画笔层（移植自 MeshViewer 的 ink 层）──
 type Mark = {
   kind: "arrow" | "rect" | "curve" | "text";
@@ -104,6 +206,7 @@ const GLYPHS = {
 } as const;
 
 const boxRef = ref<HTMLElement>();
+const imageEl = ref<HTMLImageElement>();
 const inkRef = ref<HTMLCanvasElement>();
 const textInput = ref<HTMLInputElement>();
 const tool = ref<"" | "arrow" | "rect" | "curve" | "text">("");
@@ -263,8 +366,43 @@ function clearMarks() {
 const busy = ref(false);
 
 async function capture(): Promise<{ blob: Blob; width: number; height: number } | null> {
-  const video = videoRef.value;
   const ink = inkRef.value;
+  // ACT: 图片模式截图：按图片原生尺寸导出，笔层按当前缩放/平移反投影合成（屏幕空间笔迹映回原图画布）。
+  const imgEl = imageEl.value;
+  if (imgEl && props.image && imgEl.naturalWidth && imgEl.naturalHeight) {
+    const box = boxRef.value;
+    if (!box) return null;
+    const nw = imgEl.naturalWidth;
+    const nh = imgEl.naturalHeight;
+    const W = box.clientWidth;
+    const H = box.clientHeight;
+    const out = document.createElement("canvas");
+    out.width = nw;
+    out.height = nh;
+    const ctx = out.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(imgEl, 0, 0, nw, nh);
+    if (ink && marks.value.length && W && H) {
+      const dpr = window.devicePixelRatio || 1;
+      // ACT: 图片显示区（窗中心+平移、窗尺寸×zoom）映射到 ink 画布的设备像素源矩形，越窗部分裁掉。
+      const sx = (W / 2 + panX.value - (W * zoom.value) / 2) * dpr;
+      const sy = (H / 2 + panY.value - (H * zoom.value) / 2) * dpr;
+      const sw = W * zoom.value * dpr;
+      const sh = H * zoom.value * dpr;
+      const ix0 = Math.max(0, sx);
+      const iy0 = Math.max(0, sy);
+      const ix1 = Math.min(ink.width, sx + sw);
+      const iy1 = Math.min(ink.height, sy + sh);
+      if (ix1 > ix0 && iy1 > iy0) {
+        const dx0 = ((ix0 - sx) / sw) * nw;
+        const dy0 = ((iy0 - sy) / sh) * nh;
+        ctx.drawImage(ink, ix0, iy0, ix1 - ix0, iy1 - iy0, dx0, dy0, ((ix1 - ix0) / sw) * nw, ((iy1 - iy0) / sh) * nh);
+      }
+    }
+    const blob = await new Promise<Blob | null>(resolve => out.toBlob(resolve, "image/png"));
+    return blob ? { blob, width: nw, height: nh } : null;
+  }
+  const video = videoRef.value;
   if (!video || !video.videoWidth || !video.videoHeight) return null;
   const out = document.createElement("canvas");
   out.width = video.videoWidth;
@@ -308,7 +446,11 @@ let boxObserver: ResizeObserver | null = null;
 onMounted(() => {
   window.addEventListener("keydown", onEsc);
   if (typeof ResizeObserver !== "undefined" && boxRef.value) {
-    boxObserver = new ResizeObserver(() => sizeInk());
+    // ACT: 盒子尺寸变化：笔层重测；图片模式还要重算基准缩放（未手动缩放时跟随原生尺寸 fitting）。
+    boxObserver = new ResizeObserver(() => {
+      sizeInk();
+      if (props.image) applyFit();
+    });
     boxObserver.observe(boxRef.value);
   }
   sizeInk();
@@ -325,9 +467,23 @@ onBeforeUnmount(() => {
     <div class="stageBoxWrap">
       <!-- ACT: 盒子按视频原生宽高比撑开（object-fit 无需 letterbox），画笔层与视频内容完全重合。 -->
       <!-- ACT: 无视频时不锁宽高比：占位盒高度随空态内容撑开，胶片图与文案完整可见不被裁切。 -->
-      <div ref="boxRef" class="stageBox" :class="{ empty: !current }" :style="current ? { aspectRatio: `${aspect}` } : null">
+      <div ref="boxRef" class="stageBox" :class="{ empty: !current && !image, imageMode: !!image }" :style="boxStyle">
+        <!-- ACT: 图片模式：与视频同盒同位；transform 先平移后缩放，zoom>1 时指针拖拽平移。 -->
+        <img
+          v-if="image"
+          ref="imageEl"
+          class="stageImage"
+          :class="{ pannable: zoom > 1, panning }"
+          :src="image.url"
+          :alt="image.name"
+          :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }"
+          @load="onImageLoad"
+          @pointerdown="panDown"
+          @pointermove="panMove"
+          @pointerup="panUp"
+          @pointercancel="panUp" />
         <video
-          v-if="current"
+          v-else-if="current"
           ref="videoRef"
           :src="current.url"
           preload="metadata"
@@ -362,33 +518,55 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- ACT: 控制条：左播放/暂停、中滑杆、右时间盒（滑动时显示目标时间）。无视频时播放键禁用。 -->
-    <div class="stageControls">
-      <button
-        class="ctlButton"
-        type="button"
-        :disabled="!current"
-        :aria-label="playing ? translate('暂停') : translate('播放')"
-        :title="playing ? translate('暂停') : translate('播放')"
-        @click="togglePlay">
-        <span class="pic" :style="{ '--tool-icon': `url(&quot;${playing ? iconVideoPause : iconVideoPlay}&quot;)` }" aria-hidden="true" />
-      </button>
-      <input
-        class="scrubber"
-        type="range"
-        min="0"
-        :max="duration || 0"
-        step="0.1"
-        :value="sliding ? scrub : currentTime"
-        :disabled="!duration"
-        :aria-label="translate('滑动定位')"
-        @pointerdown="onScrubDown"
-        @pointerup="onScrubUp"
-        @input="onScrubInput" />
-      <span class="timeBox">{{ sliding ? fmt(scrub) : `${fmt(currentTime)} / ${fmt(duration)}` }}</span>
+    <!-- ACT: 控制条：图片模式只留缩小/放大（替换播放/暂停、滑杆与时间盒）且居中；视频模式保持原三件套。 -->
+    <div class="stageControls" :class="{ centered: !!image }">
+      <template v-if="image">
+        <button
+          class="ctlButton"
+          type="button"
+          :disabled="zoom <= zoomMin"
+          :aria-label="translate('缩小')"
+          :title="translate('缩小')"
+          @click="zoomBy(1 / ZOOM_STEP)">
+          <span class="pic" :style="{ '--tool-icon': `url(&quot;${iconZoomOut}&quot;)` }" aria-hidden="true" />
+        </button>
+        <button
+          class="ctlButton"
+          type="button"
+          :disabled="zoom >= zoomMax"
+          :aria-label="translate('放大')"
+          :title="translate('放大')"
+          @click="zoomBy(ZOOM_STEP)">
+          <span class="pic" :style="{ '--tool-icon': `url(&quot;${iconZoomIn}&quot;)` }" aria-hidden="true" />
+        </button>
+      </template>
+      <template v-else>
+        <button
+          class="ctlButton"
+          type="button"
+          :disabled="!current"
+          :aria-label="playing ? translate('暂停') : translate('播放')"
+          :title="playing ? translate('暂停') : translate('播放')"
+          @click="togglePlay">
+          <span class="pic" :style="{ '--tool-icon': `url(&quot;${playing ? iconVideoPause : iconVideoPlay}&quot;)` }" aria-hidden="true" />
+        </button>
+        <input
+          class="scrubber"
+          type="range"
+          min="0"
+          :max="duration || 0"
+          step="0.1"
+          :value="sliding ? scrub : currentTime"
+          :disabled="!duration"
+          :aria-label="translate('滑动定位')"
+          @pointerdown="onScrubDown"
+          @pointerup="onScrubUp"
+          @input="onScrubInput" />
+        <span class="timeBox">{{ sliding ? fmt(scrub) : `${fmt(currentTime)} / ${fmt(duration)}` }}</span>
+      </template>
     </div>
 
-    <!-- ACT: 画笔工具箱：四支笔 + 墨色 + 清除/放下 + 截图发送/下载。 -->
+    <!-- ACT: 画笔工具箱：四支笔 + 墨色 + 清除/放下 + 截图发送/下载；图片模式保留在缩放键下方一行。 -->
     <div class="pens">
       <button
         v-for="item in TOOLS"
@@ -432,7 +610,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="penButton"
-        :disabled="!current || busy || !ready || !activeRoomId"
+        :disabled="(!current && !image) || busy || !ready || !activeRoomId"
         :title="translate('截图并发送到群聊')"
         :aria-label="translate('截图并发送到群聊')"
         @click="screenshot">
@@ -443,7 +621,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="penButton"
-        :disabled="!current"
+        :disabled="!current && !image"
         :title="translate('下载截图')"
         :aria-label="translate('下载截图')"
         @click="download">
@@ -492,6 +670,12 @@ onBeforeUnmount(() => {
     background: transparent;
   }
 
+  // ACT: 图片模式的最大显示窗「隐形」：不画黑底、不画边框，只看见图片本身；
+  // 图片小于最大窗时按原生尺寸居中，周围露出舞台点阵背景而非黑块。
+  &.imageMode {
+    background: transparent;
+  }
+
   :deep(.el-empty) { padding: 24px 0; }
 
   // ACT: 胶片空态图字形：mask + currentColor 同款技法，颜色取竖直分隔线同色 --el-border-color；
@@ -517,6 +701,21 @@ onBeforeUnmount(() => {
     height: 100%;
   }
 
+  // ACT: 图片模式：填满内容盒（盒子已按图片原生比例撑开，contain 即满幅）；
+  // 禁原生拖图与选中，缩放平移全走 transform；zoom>1 时抓手光标提示可拖。
+  .stageImage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-drag: none;
+
+    &.pannable { cursor: grab; }
+    &.panning { cursor: grabbing; }
+  }
+
   .ink {
     position: absolute;
     inset: 0;
@@ -540,6 +739,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 0 16px 10px;
+
+  // ACT: 图片模式：缩小/放大两键居于底行水平中间。
+  &.centered {
+    justify-content: center;
+  }
 
   .ctlButton {
     display: flex;

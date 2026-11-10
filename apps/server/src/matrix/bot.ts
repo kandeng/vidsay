@@ -55,24 +55,41 @@ export async function startMatrixBot(): Promise<(() => void) | null> {
     if (!prepared || toStartOfTimeline) return;
     if (event.getSender() === botUserId) return;
     if (event.getType() !== "m.room.message") return;
-    const content = event.getContent<{ msgtype?: string; body?: string }>() ?? {};
+    const content = event.getContent<{ msgtype?: string; body?: string; "m.relates_to"?: { "m.in_reply_to"?: { event_id?: string } } }>() ?? {};
     if (content.msgtype !== "m.text") return;
     const body = (content.body ?? "").trim();
     if (!body) return;
     const roomId = event.getRoomId();
     if (!roomId) return;
-    // ACT: 原型只服务 config.json 指定的单一房间；未指定 roomId 时对所有房间生效。
-    if (synapse.roomId && roomId !== synapse.roomId) return;
     const lower = body.toLowerCase();
-    // ACT: 聊天转视频指令优先走 trigger；其余消息交给房间编排 Agent（customer_service）。
-    if (settings.enabled && (lower.startsWith(command) || lower.includes("生成视频"))) {
+    // ACT: 聊天转视频指令仍只服务 config.json 指定的单一演示房间（原型约束）；未指定 roomId 时对所有房间生效。
+    const videoPinned = !synapse.roomId || roomId === synapse.roomId;
+    if (videoPinned && settings.enabled && (lower.startsWith(command) || lower.includes("生成视频"))) {
       void trigger.trigger(roomId).catch(err => console.error("[matrix] 触发视频生成失败:", err));
       return;
     }
+    // ACT: 房间编排 Agent（customer_service）服务机器人「已加入」的所有房间，以支持
+    // 「用户新建群聊即可对话」的预期 UX。机器人只能收到它已入群房间的时间线事件，
+    // 入群需经 /api/matrix/agent 邀请，故此处放开房间范围是安全的。
     if (responder) {
       const sender = event.getSender() ?? "";
       const senderName = client.getRoom(roomId)?.getMember(sender)?.name ?? sender;
-      void responder.respond(roomId, body, senderName).catch(err => console.error("[matrix] AI 客服回复失败:", err));
+      // ACT: 引用回复上下文：用户「引用」某条消息回复时（m.relates_to.m.in_reply_to），
+      // 把被引用消息的发送者与正文摘要一并交给编排器，使「引用问题消息逐条回复」能对应到具体问题。
+      let quote: { senderName: string; body: string } | undefined;
+      const replyToId = content["m.relates_to"]?.["m.in_reply_to"]?.event_id;
+      if (typeof replyToId === "string") {
+        const room = client.getRoom(roomId);
+        const quoted = room?.findEventById(replyToId);
+        const quotedBody = quoted?.getType() === "m.room.message" ? (quoted.getContent<{ body?: string }>() ?? {}).body : undefined;
+        if (quoted && typeof quotedBody === "string" && quotedBody.trim()) {
+          const qSender = quoted.getSender() ?? "";
+          quote = { senderName: room?.getMember(qSender)?.name ?? qSender, body: quotedBody.replace(/\s+/g, " ").trim() };
+        }
+      }
+      // ACT: 传入 sender mxid 与触发事件 event_id：前者供投递时 @ 请求用户，
+      // 后者供回执引用回复（m.in_reply_to）与按事件去重（同一事件不跑两轮）。
+      void responder.respond(roomId, body, senderName, sender || undefined, event.getId() || undefined, quote).catch(err => console.error("[matrix] AI 客服回复失败:", err));
     }
   });
 

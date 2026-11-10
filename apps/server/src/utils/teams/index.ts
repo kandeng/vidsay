@@ -51,15 +51,17 @@ export async function listTeams() {
         }
         const { manifest, readme, enabled } = await readSnapshot(entry.name);
         const { name, displayName, description, version, author, github } = manifest;
-        local.push({ name, displayName, description, version, author, github, readme, enabled, installedAt, loadError: "", kind: "local" as const });
+        // ACT: 列表附带成员花名册（名+职责），供聊天框「团队」弹只读展示；不含提示词正文。
+        const members = Object.entries(manifest.members).map(([member, value]) => ({ name: member, description: value.description }));
+        local.push({ name, displayName, description, version, author, github, readme, enabled, installedAt, loadError: "", kind: "local" as const, members });
       } catch (error) {
         local.push({ name: entry.name, displayName: entry.name, description: "", version: "", author: "", github: "", readme: "", enabled: false, installedAt,
-          loadError: translateMessage(error instanceof Error ? error.message : String(error)), kind: "local" as const });
+          loadError: translateMessage(error instanceof Error ? error.message : String(error)), kind: "local" as const, members: [] as { name: string; description: string }[] });
       }
     }
     const remote = Object.values(conf.get("remoteConnections", {})).map(({ name, cardUrl, card, enabled }) => ({
       name, displayName: card.name, description: card.description, version: card.version, author: "", github: "", readme: "", enabled,
-      installedAt: installedTimes[`agent:${name}`] ?? 0, loadError: "", kind: "remote" as const, cardUrl,
+      installedAt: installedTimes[`agent:${name}`] ?? 0, loadError: "", kind: "remote" as const, cardUrl, members: [] as { name: string; description: string }[],
     }));
     return [...local, ...remote].sort((left, right) => left.name.localeCompare(right.name));
   });

@@ -38,6 +38,7 @@
     "apps/web/src/components/settings/tfRechargeDialog.vue",
     "apps/web/src/components/modelPopover.vue",
     "apps/web/src/components/loginDialog.vue",
+    "apps/web/src/pages/chat/components/imageViewer.vue",
     "apps/web/src/pages/workspace/panels/document/components/editorTab.vue",
     "apps/web/src/pages/workspace/panels/document/components/workspaceSearch.vue"
   ],
@@ -49,6 +50,7 @@
   ],
   "播放": [
     "apps/web/src/components/videoPlayer.vue",
+    "apps/web/src/components/groupChat.vue",
     "apps/web/src/pages/chat/components/videoStage.vue"
   ],
   "暂停": [
@@ -262,6 +264,7 @@
     "apps/web/src/components/agent/mentionMenu.vue",
     "apps/web/src/components/settings/panels/mediaModel/editProviderDialog.vue",
     "apps/web/src/components/settings/panels/mediaModel/modelEditorDialog.vue",
+    "apps/web/src/pages/chat/index.vue",
     "apps/web/src/pages/workspace/panels/canvas/components/assetBrowser.vue",
     "apps/server/src/utils/media/generation.ts"
   ],
@@ -285,6 +288,7 @@
   ],
   "文件": [
     "apps/web/src/components/agent/mentionMenu.vue",
+    "apps/web/src/components/groupChat.vue",
     "apps/web/src/pages/workspace/panels/document/components/fileTree.vue",
     "apps/web/src/pages/workspace/panels/canvas/components/assetBrowser.vue"
   ],
@@ -890,6 +894,7 @@
     "apps/web/src/components/settings/panels/pluginMarket/mcpServers.vue",
     "apps/web/src/components/settings/panels/languageModel/index.vue",
     "apps/web/src/components/settings/panels/developer/index.vue",
+    "apps/web/src/components/groupChat.vue",
     "apps/web/src/pages/workspace/panels/document/components/fileTree.vue",
     "apps/web/src/pages/workspace/panels/canvas/components/assetMenu.vue",
     "apps/web/src/pages/home/workspacePicker.vue",
@@ -1101,6 +1106,7 @@
   ],
   "复制": [
     "apps/web/src/components/settings/panels/mcp/index.vue",
+    "apps/web/src/components/groupChat.vue",
     "apps/web/src/pages/workspace/panels/document/components/fileTree.vue",
     "apps/web/src/lib/i18n.ts"
   ],
@@ -1540,7 +1546,8 @@
     "apps/web/src/components/settings/panels/personalization.vue"
   ],
   "查看": [
-    "apps/web/src/components/settings/panels/personalization.vue"
+    "apps/web/src/components/settings/panels/personalization.vue",
+    "apps/web/src/components/groupChat.vue"
   ],
   "vidsay 记忆": [
     "apps/web/src/components/settings/panels/personalization.vue"
@@ -3978,7 +3985,34 @@
   "还没有消息，发送第一条开始讨论吧。": [
     "apps/web/src/components/groupChat.vue"
   ],
+  "下载": [
+    "apps/web/src/components/groupChat.vue",
+    "apps/web/src/pages/workspace/panels/canvas/components/assetMenu.vue",
+    "apps/web/src/lib/i18n.ts"
+  ],
   "{0} 正在输入…": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "引用": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "团队": [
+    "apps/web/src/components/groupChat.vue",
+    "apps/server/src/utils/plugins/install.ts"
+  ],
+  "房间编排客服": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "驻守本群聊：理解消息、编排团队、投递成果与回执。": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "加载中…": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "暂无已启用团队": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "取消引用": [
     "apps/web/src/components/groupChat.vue"
   ],
   "输入消息，Enter 发送，Shift+Enter 换行": [
@@ -3989,10 +4023,6 @@
   ],
   "发送": [
     "apps/web/src/components/groupChat.vue"
-  ],
-  "团队": [
-    "apps/web/src/components/groupChat.vue",
-    "apps/server/src/utils/plugins/install.ts"
   ],
   "上传文件": [
     "apps/web/src/components/groupChat.vue"
@@ -4012,6 +4042,18 @@
   "房间 ID 或别名": [
     "apps/web/src/components/groupChat.vue"
   ],
+  "已复制到剪贴板": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "复制失败，请手动复制": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "已删除": [
+    "apps/web/src/components/groupChat.vue"
+  ],
+  "删除失败，请稍后重试": [
+    "apps/web/src/components/groupChat.vue"
+  ],
   "发送失败": [
     "apps/web/src/components/groupChat.vue"
   ],
@@ -4024,11 +4066,10 @@
   "加入群聊失败": [
     "apps/web/src/components/groupChat.vue"
   ],
-  "团队功能将在后续任务接入": [
-    "apps/web/src/components/groupChat.vue"
-  ],
-  "附件上传将在后续任务接入": [
-    "apps/web/src/components/groupChat.vue"
+  "上传失败，请稍后重试": [
+    "apps/web/src/components/groupChat.vue",
+    "apps/web/src/pages/chat/components/videoStage.vue",
+    "apps/web/src/composables/useMatrixChat.ts"
   ],
   "无法连接 Matrix/Synapse，请确认本地 Synapse 已启动且已配置 config.json 的 synapse 块": [
     "apps/web/src/components/groupChat.vue",
@@ -4271,6 +4312,18 @@
   "输入文字，Enter 落笔，Esc 取消": [
     "apps/web/src/pages/chat/components/videoStage.vue"
   ],
+  "缩小": [
+    "apps/web/src/pages/chat/components/videoStage.vue",
+    "apps/web/src/pages/workspace/index.vue",
+    "apps/web/src/lib/i18n.ts",
+    "apps/web/src/lib/canvasShortcuts.ts"
+  ],
+  "放大": [
+    "apps/web/src/pages/chat/components/videoStage.vue",
+    "apps/web/src/pages/workspace/index.vue",
+    "apps/web/src/lib/i18n.ts",
+    "apps/web/src/lib/canvasShortcuts.ts"
+  ],
   "滑动定位": [
     "apps/web/src/pages/chat/components/videoStage.vue"
   ],
@@ -4288,10 +4341,6 @@
   ],
   "下载截图": [
     "apps/web/src/pages/chat/components/videoStage.vue"
-  ],
-  "上传失败，请稍后重试": [
-    "apps/web/src/pages/chat/components/videoStage.vue",
-    "apps/web/src/composables/useMatrixChat.ts"
   ],
   "登录后即可参与群聊": [
     "apps/web/src/pages/chat/index.vue"
@@ -4885,10 +4934,6 @@
   ],
   "移动到目录": [
     "apps/web/src/pages/workspace/panels/canvas/components/assetMenu.vue"
-  ],
-  "下载": [
-    "apps/web/src/pages/workspace/panels/canvas/components/assetMenu.vue",
-    "apps/web/src/lib/i18n.ts"
   ],
   "请先删除文件夹内的素材": [
     "apps/web/src/pages/workspace/panels/canvas/components/assetMenu.vue"
@@ -5576,16 +5621,6 @@
   ],
   "缩放百分比": [
     "apps/web/src/pages/workspace/index.vue"
-  ],
-  "放大": [
-    "apps/web/src/pages/workspace/index.vue",
-    "apps/web/src/lib/i18n.ts",
-    "apps/web/src/lib/canvasShortcuts.ts"
-  ],
-  "缩小": [
-    "apps/web/src/pages/workspace/index.vue",
-    "apps/web/src/lib/i18n.ts",
-    "apps/web/src/lib/canvasShortcuts.ts"
   ],
   "已按自动生成模式准备工作室": [
     "apps/web/src/pages/workspace/index.vue"
@@ -6751,6 +6786,39 @@
   "工作流已被更新，请先同步到最新版本再提交": [
     "apps/server/src/matrix/agentWorkspace.ts"
   ],
+  "目标成片时长（分钟）": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "基调，如 nostalgia、black humor": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "风格补充": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "剧本语言，如 zh、en": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "目标受众": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "用户提出的其他约束原文": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "改动维度，如结构/基调/人物/对白/时长": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "改动前（草稿或上一版）的处理": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "本版剧本的处理": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "改编理由": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
+  "制作状态已被更新，请重新读取后再写入": [
+    "apps/server/src/matrix/productionState.ts"
+  ],
   "[matrix] 未配置 synapse.botUserId，AI 客服无法入群": [
     "apps/server/src/matrix/agent.ts"
   ],
@@ -6782,6 +6850,9 @@
     "apps/server/src/matrix/trigger.ts"
   ],
   "尚未配置可用的文本模型，AI 客服暂时无法回复。": [
+    "apps/server/src/matrix/responder.ts"
+  ],
+  "收到，正在处理…": [
     "apps/server/src/matrix/responder.ts"
   ],
   "画布辐条已断开，请确认工作室标签页仍然打开": [

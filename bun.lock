@@ -594,6 +594,13 @@
         "express": "^5.2.1",
       },
     },
+    "packages/teams/productionTeam": {
+      "name": "@toonflow/team-production",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@toonflow/teams-scaffold": "workspace:*",
+      },
+    },
     "packages/teams/storyboardTeam": {
       "name": "@toonflow/team-storyboard",
       "version": "2.0.0",
@@ -1419,6 +1426,8 @@
     "@toonflow/providers": ["@toonflow/providers@workspace:packages/providers"],
 
     "@toonflow/server": ["@toonflow/server@workspace:apps/server"],
+
+    "@toonflow/team-production": ["@toonflow/team-production@workspace:packages/teams/productionTeam"],
 
     "@toonflow/team-storyboard": ["@toonflow/team-storyboard@workspace:packages/teams/storyboardTeam"],
 

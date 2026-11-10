@@ -1,0 +1,8 @@
+{
+  "name": "@toonflow/team-production",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "bun build.ts", "typecheck": "tsc" },
+  "devDependencies": { "@toonflow/teams-scaffold": "workspace:*" }
+}

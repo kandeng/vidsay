@@ -23,6 +23,9 @@ export type ChatMessage = {
   url: string; // 媒体消息解析出的可播放 blob 地址；文本消息为空串
   ts: number;
   mine: boolean;
+  // ACT: 引用回复（m.relates_to.m.in_reply_to）：被回复消息的发送者与正文摘要，
+  // 供气泡下方渲染微信式引用条；原消息不在本地时间线时为 undefined（不臆造）。
+  quote?: { id: string; senderName: string; body: string };
 };
 
 // 房间列表项：邀请排在最前，其余按最后一条消息时间倒序。
@@ -56,6 +59,9 @@ const rooms = ref<RoomSummary[]>([]);
 const timeline = ref<ChatMessage[]>([]);
 const videos = ref<VideoCard[]>([]);
 const typingNames = ref<string[]>([]);
+// ACT: 待发送的引用（微信式「引用」）：右键消息选「引用」后暂存于此，输入框上方显示引用条；
+// 发送时随 m.relates_to.m.in_reply_to 一起发出并清空；切换房间时一并清空。
+const pendingQuote = ref<ChatMessage["quote"] | null>(null);
 
 let client: sdk.MatrixClient | null = null;
 // ACT: client 是普通变量，computed 无法感知它由 null 变成实例。
@@ -165,6 +171,24 @@ function updateTyping(room: sdk.Room | null) {
     .map(member => member.name);
 }
 
+// 解析引用回复：取 m.relates_to.m.in_reply_to.event_id，在本地时间线里找原消息，
+// 抽出发送者显示名与单行化正文摘要；找不到原消息或原消息无正文时返回 undefined。
+function resolveQuote(room: sdk.Room, content: Record<string, unknown>): ChatMessage["quote"] {
+  const relates = content["m.relates_to"] as { "m.in_reply_to"?: { event_id?: unknown } } | undefined;
+  const eventId = relates?.["m.in_reply_to"]?.event_id;
+  if (typeof eventId !== "string" || !eventId) return undefined;
+  const quoted = room.findEventById(eventId);
+  if (!quoted || quoted.getType() !== "m.room.message") return undefined;
+  const quotedBody = (quoted.getContent() ?? {}).body;
+  if (typeof quotedBody !== "string" || !quotedBody.trim()) return undefined;
+  const sender = quoted.getSender() ?? "";
+  return {
+    id: eventId,
+    senderName: room.getMember(sender)?.name || sender,
+    body: quotedBody.replace(/\s+/g, " ").trim(),
+  };
+}
+
 function refreshTimeline() {
   if (!client || !activeRoomId.value) { timeline.value = []; typingNames.value = []; return; }
   const room = client.getRoom(activeRoomId.value);
@@ -194,6 +218,7 @@ function refreshTimeline() {
       url: cachedMediaUrl(mxc),
       ts: ev.getTs(),
       mine: senderId === me,
+      quote: resolveQuote(room, content),
     });
   }
   timeline.value = msgs;
@@ -362,6 +387,7 @@ function teardown() {
 function setActiveRoom(roomId: string) {
   if (!roomId || activeRoomId.value === roomId) { refreshTimeline(); return; }
   activeRoomId.value = roomId;
+  pendingQuote.value = null;
   refreshTimeline();
   markRead();
   refreshRooms();
@@ -437,7 +463,20 @@ function markRead() {
 async function sendText(body: string) {
   const text = (body || "").trim();
   if (!client || !activeRoomId.value || !text) return;
-  await client.sendTextMessage(activeRoomId.value, text);
+  const quote = pendingQuote.value;
+  pendingQuote.value = null;
+  if (quote) {
+    // ACT: 引用回复：与服务器侧 roomPost 相同的 m.relates_to.m.in_reply_to 结构；
+    // sendTextMessage 不支持附加 relates_to，故直接发事件（sendEvent 需 bind 保住 this）。
+    const sendEvent = client.sendEvent.bind(client) as unknown as (roomId: string, eventType: string, content: Record<string, unknown>) => Promise<unknown>;
+    await sendEvent(activeRoomId.value, "m.room.message", {
+      msgtype: "m.text",
+      body: text,
+      "m.relates_to": { "m.in_reply_to": { event_id: quote.id } },
+    });
+  } else {
+    await client.sendTextMessage(activeRoomId.value, text);
+  }
   refreshTimeline();
   refreshRooms();
 }
@@ -454,6 +493,50 @@ async function sendImage(file: File, name: string, width: number, height: number
     url: mxc,
     info: { mimetype: file.type, size: file.size, w: width, h: height },
   });
+  refreshTimeline();
+  refreshRooms();
+}
+
+// 读取图片自然尺寸；解码失败时回落 0（info 里仅作提示，不影响投递）。
+function imageSize(file: File): Promise<{ width: number; height: number }> {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { const { naturalWidth, naturalHeight } = img; URL.revokeObjectURL(url); resolve({ width: naturalWidth, height: naturalHeight }); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve({ width: 0, height: 0 }); };
+    img.src = url;
+  });
+}
+
+// ACT: 删除自己发出的消息（右键菜单「删除」）：走 Matrix redaction——服务端抹去内容，
+// 所有客户端同步后该事件不再带 msgtype，refreshTimeline 会把它从时间线上过滤掉；
+// 同时刷新广场视频聚合，被删的 m.video 也会从广场消失。仅消息发送者本人可用（服务端按权限校验）。
+async function deleteMessage(eventId: string) {
+  if (!client || !activeRoomId.value) throw new Error(translate("尚未连接到聊天服务"));
+  const redactEvent = client.redactEvent.bind(client) as unknown as (roomId: string, eventId: string, txnId?: string, content?: Record<string, unknown>) => Promise<unknown>;
+  await redactEvent(activeRoomId.value, eventId);
+  refreshTimeline();
+  refreshVideos();
+  refreshRooms();
+}
+
+// ACT: 附件上传（聊天框「上传文件」按钮）：按 MIME 分发——图片 m.image（带宽高）、
+// 视频 m.video（时间线渲染为可播卡片、广场可聚合）、其余 m.file（时间线渲染为可下载卡片）。
+async function sendFile(file: File) {
+  if (!client || !activeRoomId.value) throw new Error(translate("尚未连接到聊天服务"));
+  const uploaded = await client.uploadContent(file, { name: file.name, type: file.type });
+  const mxc = typeof uploaded === "string" ? uploaded : (uploaded as { content_uri?: string })?.content_uri;
+  if (!mxc) throw new Error(translate("上传失败，请稍后重试"));
+  // ACT: 三分支字面量发送：matrix-js-sdk v42 的 RoomMessageEventContent 是严格判别联合，
+  // 用变量传 msgtype 会丢失窄化而报类型错，故按 MIME 直接写字面量。
+  if (file.type.startsWith("image/")) {
+    const { width, height } = await imageSize(file);
+    await client.sendMessage(activeRoomId.value, { msgtype: sdk.MsgType.Image, body: file.name, url: mxc, info: { mimetype: file.type, size: file.size, w: width, h: height } });
+  } else if (file.type.startsWith("video/")) {
+    await client.sendMessage(activeRoomId.value, { msgtype: sdk.MsgType.Video, body: file.name, url: mxc, info: { mimetype: file.type, size: file.size } });
+  } else {
+    await client.sendMessage(activeRoomId.value, { msgtype: sdk.MsgType.File, body: file.name, url: mxc, info: { mimetype: file.type, size: file.size } });
+  }
   refreshTimeline();
   refreshRooms();
 }
@@ -495,9 +578,9 @@ export function useMatrixChat() {
   return {
     ready, connecting, error, myUserId,
     rooms, joinedRooms, invites, activeRoomId, roomName, isHost,
-    timeline, videos, typingNames,
+    timeline, videos, typingNames, pendingQuote,
     bootstrap, teardown, refreshRooms,
     setActiveRoom, createRoom, joinRoom, acceptInvite,
-    sendText, sendImage, noteTyping, markRead,
+    sendText, sendImage, sendFile, deleteMessage, noteTyping, markRead,
   };
 }

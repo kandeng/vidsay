@@ -48,7 +48,8 @@ export const WORKFLOW_FILE = "workflow.json";
 
 // 编排器（服务器侧 customer_service Agent）的私有状态文件：与用户画布同处房间工作区根目录，
 // 但不属于用户可见/可编辑的产物，需从文件树中排除（画布枚举天然排除：它们没有 toonflowCanvas 标记）。
-export const ORCHESTRATOR_STATE_FILES = new Set([WORKFLOW_FILE, "grants.json"]);
+// production.json 是制作流水线状态机（文学剧本阶段的轮次/审阅/版本登记）。
+export const ORCHESTRATOR_STATE_FILES = new Set([WORKFLOW_FILE, "grants.json", "production.json"]);
 
 // 单画布 1:1:1 绑定（Task 6）：确保房间工作区里至少存在一个画布文件。
 // 房间根目录除编排器状态文件外没有任何 .json 时，播种一个空白且格式有效的画布（画布N.json）。

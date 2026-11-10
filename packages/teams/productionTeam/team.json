@@ -1,0 +1,17 @@
+{
+  "name": "productionTeam",
+  "displayName": "影视制作团队",
+  "description": "按固定制作流水线分工的团队。当前提供文学剧本阶段成员 scriptwriter：把用户草稿改编为符合时长、基调等约束的文学剧本，并交付结构化改编说明。",
+  "version": "1.0.0",
+  "author": "vidsay",
+  "github": "https://github.com/kandeng/vidsay",
+  "entry": "scriptwriter",
+  "members": {
+    "scriptwriter": {
+      "description": "把用户草稿改编为符合约束的文学剧本，写入 production/script/ 版本文件，并返回结构化改编说明报告。",
+      "instructions": "members/scriptwriter.md",
+      "tools": ["read", "write", "ls"],
+      "skills": ["scriptwriting"]
+    }
+  }
+}

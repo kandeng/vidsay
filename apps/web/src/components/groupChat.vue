@@ -51,7 +51,7 @@
       <div class="messageList">
         <p v-if="!activeRoomId" class="emptyHint">{{ translate("还没有群聊，点右上角新建一个。") }}</p>
         <p v-else-if="!timeline.length" class="emptyHint">{{ translate("还没有消息，发送第一条开始讨论吧。") }}</p>
-        <div v-for="msg in timeline" :key="msg.id" class="messageRow" :class="{ mine: msg.mine, anchored: anchoredId === msg.id }" :data-event-id="msg.id">
+        <div v-for="msg in timeline" :key="msg.id" class="messageRow" :class="{ mine: msg.mine, anchored: anchoredId === msg.id }" :data-event-id="msg.id" @contextmenu.prevent="openQuoteMenu($event, msg)">
           <!-- ACT: 圆形头像置于气泡外侧（他人左/自己右）；无头像时用首字母占位圆。 -->
           <span v-if="!msg.mine" class="msgAvatar" :aria-label="msg.senderName">
             <img v-if="msg.senderAvatar" :src="msg.senderAvatar" :alt="msg.senderName" />
@@ -65,8 +65,25 @@
               <span class="videoCardIcon" :style="{ '--tool-icon': `url(&quot;${iconMovieFilm}&quot;)` }" aria-hidden="true" />
               <span class="videoCardName">{{ msg.body || translate("视频") }}</span>
             </button>
-            <el-image v-else-if="msg.msgtype === 'm.image' && msg.url" class="media" :src="msg.url" fit="contain" :preview-src-list="[msg.url]" />
+            <!-- ACT: 点击图片交主面板（与视频播放器同位）展示；工作室无主面板，保留 el-image 全屏预览。 -->
+            <el-image
+              v-else-if="msg.msgtype === 'm.image' && msg.url"
+              class="media"
+              :class="{ clickable: !embedded }"
+              :src="msg.url"
+              fit="contain"
+              :preview-src-list="embedded ? [msg.url] : []"
+              @click="openStageImage(msg.id)" />
+            <!-- ACT: 附件卡片：m.file 渲染为可下载卡片（blob 已经鉴权媒体解析），点击按原文件名落盘。 -->
+            <button v-else-if="msg.msgtype === 'm.file' && msg.url" type="button" class="fileCard" :title="translate('下载')" @click="downloadFile(msg)">
+              <span class="fileCardIcon" :style="{ '--tool-icon': `url(&quot;${iconFileUpload}&quot;)` }" aria-hidden="true" />
+              <span class="fileCardName">{{ msg.body || translate("文件") }}</span>
+            </button>
             <p class="text">{{ msg.body }}</p>
+            <!-- ACT: 微信式引用条：回复消息下方以灰底小字展示被引用消息（发送者+正文摘要），点击跳回原文。 -->
+            <button v-if="msg.quote" type="button" class="quote" @click="jumpToEvent(msg.quote.id)">
+              <span class="quoteSender">{{ msg.quote.senderName }}: </span><span class="quoteBody">{{ msg.quote.body }}</span>
+            </button>
           </div>
           <span v-if="msg.mine" class="msgAvatar" :aria-label="msg.senderName">
             <img v-if="msg.senderAvatar" :src="msg.senderAvatar" :alt="msg.senderName" />
@@ -80,7 +97,45 @@
       <span v-if="typingNames.length">{{ typingNames.join("、") }} 正在输入…</span>
     </div>
 
+    <!-- ACT: 微信式右键菜单：首项按消息类型变化（视频→播放 / 图片→查看 / 文本→复制），其后恒为「引用」。 -->
+    <div v-if="quoteMenu" class="quoteMenu" :style="{ left: `${quoteMenu.x}px`, top: `${quoteMenu.y}px` }" role="menu">
+      <button v-if="!embedded && quoteMenu.msg.msgtype === 'm.video' && quoteMenu.msg.url" type="button" role="menuitem" @click="playFromMenu">{{ translate("播放") }}</button>
+      <button v-else-if="!embedded && quoteMenu.msg.msgtype === 'm.image' && quoteMenu.msg.url" type="button" role="menuitem" @click="viewFromMenu">{{ translate("查看") }}</button>
+      <button v-else-if="quoteMenu.msg.msgtype === 'm.text'" type="button" role="menuitem" @click="copyFromMenu">{{ translate("复制") }}</button>
+      <button type="button" role="menuitem" @click="applyQuote">{{ translate("引用") }}</button>
+      <!-- ACT: 仅自己的消息可删（Matrix redaction）；危险操作红字展示。 -->
+      <button v-if="quoteMenu.msg.mine" type="button" role="menuitem" class="danger" @click="deleteFromMenu">{{ translate("删除") }}</button>
+    </div>
+
     <footer class="chatComposer">
+      <!-- ACT: 团队弹层：只读列出房间编排客服与已启用团队（含成员分工）；遮罩层点外关闭。 -->
+      <div v-if="teamVisible" class="teamBackdrop" @click="teamVisible = false"></div>
+      <div v-if="teamVisible" class="teamPopover" role="dialog" :aria-label="translate('团队')">
+        <header class="teamPopoverTitle">{{ translate("团队") }}</header>
+        <ul class="teamList">
+          <li class="teamItem">
+            <span class="teamName">{{ translate("房间编排客服") }}</span>
+            <span class="teamDesc">{{ translate("驻守本群聊：理解消息、编排团队、投递成果与回执。") }}</span>
+          </li>
+          <li v-for="item in teams" :key="item.name" class="teamItem">
+            <span class="teamName">{{ item.displayName }}</span>
+            <span class="teamDesc">{{ item.description }}</span>
+            <ul v-if="item.members.length" class="memberList">
+              <li v-for="member in item.members" :key="member.name">
+                <span class="memberName">{{ member.name }}</span>
+                <span class="teamDesc">{{ member.description }}</span>
+              </li>
+            </ul>
+          </li>
+        </ul>
+        <p v-if="teamLoading" class="teamEmpty">{{ translate("加载中…") }}</p>
+        <p v-else-if="!teams.length" class="teamEmpty">{{ translate("暂无已启用团队") }}</p>
+      </div>
+      <!-- ACT: 发送前引用预览条：输入框上方灰底一条展示被引用消息，可点 × 取消。 -->
+      <div v-if="pendingQuote" class="quotePreview">
+        <span class="quotePreviewText"><b>{{ pendingQuote.senderName }}: </b>{{ pendingQuote.body }}</span>
+        <button type="button" class="quotePreviewClose" :aria-label="translate('取消引用')" :title="translate('取消引用')" @click="pendingQuote = null">×</button>
+      </div>
       <div class="composerMain">
         <el-input
           v-model="draft"
@@ -148,6 +203,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import axios from "axios";
 import { ElMessage, type ScrollbarInstance } from "element-plus";
 import { translate } from "@toonflow/i18n/vue";
 // ACT: 工具按钮图标统一取自 src/icons（CSS mask + currentColor 着色，与全局外壳一致）。
@@ -155,7 +211,7 @@ import iconUserGroup from "@/icons/user_group.svg";
 import iconFileUpload from "@/icons/file_upload.svg";
 import iconMovieFilm from "@/icons/movie_film.svg";
 import { useAuthStore } from "@/stores/auth";
-import { useMatrixChat } from "@/composables/useMatrixChat";
+import { useMatrixChat, type ChatMessage } from "@/composables/useMatrixChat";
 
 // ACT: 可复用的「房间时间线聊天框」（计划 Task 3）。它是 Chat 页与 Studio 页共用的同一个组件，
 // 只渲染 Matrix 房间时间线 + 输入区，不含模型选择器/提及/工具气泡——customer_service（服务器侧
@@ -172,15 +228,21 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   // 点击时间线里的视频卡片：由页面决定加载到视频舞台或预览。
   (event: "select-video", id: string): void;
+  // ACT: 右键菜单「播放」：页面把该视频载入左栏视频舞台并自动起播。
+  (event: "play-video", id: string): void;
+  // ACT: 右键菜单「查看」：页面在右栏图片查看器里展示该图片。
+  (event: "view-image", id: string): void;
+  // ACT: 点击时间线图片：页面把该图片载入主面板（与视频播放器同位）展示。
+  (event: "stage-image", id: string): void;
 }>();
 
 const route = useRoute();
 const auth = useAuthStore();
 const {
   ready, connecting, error: chatError, joinedRooms, invites,
-  activeRoomId, isHost, timeline, typingNames,
+  activeRoomId, isHost, timeline, typingNames, pendingQuote,
   bootstrap, setActiveRoom, createRoom, joinRoom, acceptInvite,
-  sendText, noteTyping,
+  sendText, sendFile, deleteMessage, noteTyping,
 } = useMatrixChat();
 
 const draft = ref("");
@@ -229,8 +291,94 @@ async function anchorFromQuery() {
   if (anchorTimer) clearTimeout(anchorTimer);
   anchorTimer = setTimeout(() => { anchoredId.value = ""; }, 2600);
 }
+
+// ACT: 引用条点击：滚到被引用消息并短暂高亮（复用锚定的滚动+高亮逻辑）。
+function jumpToEvent(eventId: string) {
+  const wrap = scroller.value?.wrapRef;
+  const target = wrap?.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(eventId)}"]`) ?? null;
+  if (!target) return;
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  anchoredId.value = eventId;
+  if (anchorTimer) clearTimeout(anchorTimer);
+  anchorTimer = setTimeout(() => { anchoredId.value = ""; }, 2600);
+}
 watch([() => route.query.room, () => route.query.event, ready, () => auth.signedIn], () => { void anchorFromQuery(); }, { immediate: true });
-onBeforeUnmount(() => { if (anchorTimer) clearTimeout(anchorTimer); });
+
+// ── 微信式「引用」：右键消息弹菜单，选择后在输入框上方挂引用条，发送时随 in_reply_to 发出 ──
+const quoteMenu = ref<{ x: number; y: number; msg: ChatMessage } | null>(null);
+
+function closeQuoteMenu() { quoteMenu.value = null; }
+
+function onQuoteMenuKey(event: KeyboardEvent) { if (event.key === "Escape") quoteMenu.value = null; }
+
+function openQuoteMenu(event: MouseEvent, msg: ChatMessage) {
+  // ACT: 菜单约 96×96（最多三项：类型项/引用/删除）：贴右键位置弹出，靠边时收回视口内。
+  const x = Math.max(8, Math.min(event.clientX, window.innerWidth - 104));
+  const y = Math.max(8, Math.min(event.clientY, window.innerHeight - 104));
+  quoteMenu.value = { x, y, msg };
+}
+
+function applyQuote() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  pendingQuote.value = { id: msg.id, senderName: msg.senderName, body: msg.body.replace(/\s+/g, " ").trim() };
+}
+
+// ACT: 右键菜单「播放」：复用卡片点选的选择链路，再额外发 play-video 让页面自动起播。
+function playFromMenu() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  selectVideo(msg.id);
+  emit("play-video", msg.id);
+}
+
+// ACT: 右键菜单「查看」：把图片消息 id 交给页面，由右栏查看器展示。
+function viewFromMenu() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  emit("view-image", msg.id);
+}
+
+// ACT: 点击时间线图片：群聊页交主面板（与视频播放器同位）展示；工作室（embedded）无主面板，
+// 直接返回，由 el-image 自带的全屏预览接管。
+function openStageImage(id: string) {
+  if (props.embedded) return;
+  emit("stage-image", id);
+}
+
+// ACT: 右键菜单「复制」：文本正文进系统剪贴板，可粘贴到输入框或任何地方。
+async function copyFromMenu() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  try {
+    await navigator.clipboard.writeText(msg.body);
+    ElMessage.success(translate("已复制到剪贴板"));
+  } catch {
+    ElMessage.error(translate("复制失败，请手动复制"));
+  }
+}
+
+// ACT: 右键菜单「删除」：只对自己的消息展示，走 redaction 后刷新时间线；失败时 toast 提示。
+async function deleteFromMenu() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  try {
+    await deleteMessage(msg.id);
+    ElMessage.success(translate("已删除"));
+  } catch {
+    ElMessage.error(translate("删除失败，请稍后重试"));
+  }
+}
+onBeforeUnmount(() => {
+  if (anchorTimer) clearTimeout(anchorTimer);
+  window.removeEventListener("click", closeQuoteMenu);
+  window.removeEventListener("keydown", onQuoteMenuKey);
+});
 
 function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -313,13 +461,61 @@ async function accept(roomId: string) {
   }
 }
 
-// ACT: 团队与附件上传为占位入口，实际能力在后续任务接入。
-function team() { ElMessage.info("团队功能将在后续任务接入"); }
-function onPickFiles(event: Event) {
+// ── 团队弹层：只读列出房间编排客服与已启用团队（含成员分工） ──
+type TeamMemberInfo = { name: string; description: string };
+type TeamInfo = { name: string; displayName: string; description: string; members: TeamMemberInfo[] };
+const teamVisible = ref(false);
+const teamLoading = ref(false);
+const teams = ref<TeamInfo[]>([]);
+
+function team() {
+  teamVisible.value = !teamVisible.value;
+  if (teamVisible.value) void loadTeams();
+}
+
+async function loadTeams() {
+  teamLoading.value = true;
+  try {
+    const { data } = await axios.get("/api/agents/get");
+    const agents = data?.code === 200 && Array.isArray(data.data?.agents) ? (data.data.agents as Record<string, unknown>[]) : [];
+    teams.value = agents
+      .filter(agent => agent.enabled === true)
+      .map(agent => ({
+        name: String(agent.name ?? ""),
+        displayName: String(agent.displayName ?? agent.name ?? ""),
+        description: String(agent.description ?? ""),
+        members: Array.isArray(agent.members)
+          ? (agent.members as Record<string, unknown>[]).map(member => ({ name: String(member.name ?? ""), description: String(member.description ?? "") }))
+          : [],
+      }));
+  } catch {
+    teams.value = [];
+  } finally {
+    teamLoading.value = false;
+  }
+}
+
+// ACT: 附件上传：逐个走 sendFile（按 MIME 分发 m.image/m.video/m.file）；单文件失败提示后继续其余。
+async function onPickFiles(event: Event) {
   const input = event.target as HTMLInputElement;
-  const count = input.files?.length ?? 0;
+  const files = [...(input.files ?? [])];
   input.value = "";
-  if (count) ElMessage.info("附件上传将在后续任务接入");
+  for (const file of files) {
+    try {
+      await sendFile(file);
+    } catch (err) {
+      ElMessage.error(err instanceof Error ? err.message : translate("上传失败，请稍后重试"));
+    }
+  }
+}
+
+// ACT: 文件卡片点击：按原文件名落盘；blob 已经鉴权媒体解析，直接交给 anchor 下载。
+function downloadFile(msg: ChatMessage) {
+  if (!msg.url) return;
+  const anchor = document.createElement("a");
+  anchor.href = msg.url;
+  anchor.download = msg.body || "file";
+  anchor.click();
 }
 
 async function start() {
@@ -335,6 +531,8 @@ watch(activeRoomId, scrollToBottom);
 watch(() => auth.signedIn, value => { if (value) void start(); });
 
 onMounted(async () => {
+  window.addEventListener("click", closeQuoteMenu);
+  window.addEventListener("keydown", onQuoteMenuKey);
   await auth.restore();
   await start();
 });
@@ -515,6 +713,33 @@ void props;
       max-width: 100%;
       border-radius: calc(var(--ui-radius) * 0.75);
       margin-bottom: 4px;
+
+      // ACT: 可点进主面板的图片：放大镜光标提示可点击。
+      &.clickable { cursor: zoom-in; }
+    }
+
+    // ACT: 微信式引用条：灰底、左竖线、最多两行截断；点击跳回被引用消息。
+    .quote {
+      display: -webkit-box;
+      width: 100%;
+      margin-top: 6px;
+      padding: 4px 8px;
+      border: none;
+      border-left: 2px solid var(--el-border-color);
+      border-radius: 4px;
+      background: var(--el-fill-color);
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: left;
+      cursor: pointer;
+      overflow: hidden;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+
+      .quoteSender {
+        color: var(--el-text-color-regular);
+      }
     }
 
     .videoCard {
@@ -562,6 +787,50 @@ void props;
       text-overflow: ellipsis;
     }
 
+    // ACT: 附件卡片：与视频卡片同形的通栏边框行；点击按原文件名下载。
+    .fileCard {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 4px;
+      border: 1px solid var(--el-border-color);
+      border-radius: calc(var(--ui-radius) * 0.75);
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      text-align: start;
+      transition: border-color 0.15s ease, background 0.15s ease;
+
+      &:hover {
+        background: var(--el-fill-color);
+      }
+    }
+
+    .fileCardIcon {
+      display: block;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      background-color: currentColor;
+      mask-image: var(--tool-icon);
+      mask-repeat: no-repeat;
+      mask-position: center;
+      mask-size: contain;
+      -webkit-mask-image: var(--tool-icon);
+      -webkit-mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      -webkit-mask-size: contain;
+    }
+
+    .fileCardName {
+      overflow: hidden;
+      font-size: 13px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
     .text {
       margin: 0;
       font-size: 14px;
@@ -579,12 +848,151 @@ void props;
   color: var(--el-text-color-secondary);
 }
 
+// ACT: 微信式右键菜单：浮层小菜单，目前仅「引用」一项。
+.quoteMenu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 88px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+  box-shadow: var(--el-box-shadow-light);
+
+  button {
+    display: block;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--el-text-color-primary);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--el-fill-color-light);
+    }
+
+    // ACT: 菜单里的危险项（删除）：红字，悬停淡红底。
+    &.danger {
+      color: var(--el-color-danger);
+
+      &:hover {
+        background: var(--el-color-danger-light-9);
+      }
+    }
+  }
+}
+
+// ACT: 发送前引用预览条：输入框上方灰底一条，单行截断，可取消。
+.quotePreview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--el-border-color);
+  border-radius: 4px;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+
+  .quotePreviewText {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .quotePreviewClose {
+    border: none;
+    background: transparent;
+    color: var(--el-text-color-secondary);
+    font-size: 14px;
+    cursor: pointer;
+  }
+}
+
 .chatComposer {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--el-border-color-lighter);
+
+  // ACT: 团队弹层遮罩：全屏透明层，点外关闭（z 30/31 与既有弹层约定一致）。
+  .teamBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+  }
+
+  // ACT: 团队弹层：错定在输入区上方（bottom: 100% + 8px），只读花名册。
+  .teamPopover {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    z-index: 31;
+    width: min(320px, calc(100vw - 32px));
+    max-height: 320px;
+    overflow: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
+    background: var(--el-bg-color-overlay);
+    box-shadow: var(--el-box-shadow-light);
+
+    .teamPopoverTitle {
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .teamList {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .teamItem {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .teamName {
+      font-size: 13px;
+      color: var(--el-text-color-primary);
+    }
+
+    .teamDesc {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--el-text-color-secondary);
+    }
+
+    .memberList {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 4px;
+      padding-left: 10px;
+      border-left: 2px solid var(--el-border-color-lighter);
+    }
+
+    .memberName {
+      font-size: 12px;
+      color: var(--el-text-color-regular);
+    }
+
+    .teamEmpty {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+  }
 
   .composerMain {
     display: flex;
