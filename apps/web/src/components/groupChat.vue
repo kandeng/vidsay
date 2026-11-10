@@ -62,7 +62,9 @@
               <span class="time">{{ formatTime(msg.ts) }}</span>
             </div>
             <button v-if="msg.msgtype === 'm.video' && msg.url" type="button" class="videoCard" :class="{ active: msg.id === selectedVideoId }" @click="selectVideo(msg.id)">
-              <span class="videoCardIcon" :style="{ '--tool-icon': `url(&quot;${iconMovieFilm}&quot;)` }" aria-hidden="true" />
+              <!-- ACT: 封面图：优先消息自带缩略图（info.thumbnail_url）；没有时用 <video #t=0.1> 取首帧当默认封面。 -->
+              <img v-if="msg.thumb" class="videoCardThumb" :src="msg.thumb" :alt="msg.body || translate('视频')" />
+              <video v-else class="videoCardThumb" :src="`${msg.url}#t=0.1`" preload="metadata" muted playsinline tabindex="-1" aria-hidden="true" />
               <span class="videoCardName">{{ msg.body || translate("视频") }}</span>
             </button>
             <!-- ACT: 点击图片交主面板（与视频播放器同位）展示；工作室无主面板，保留 el-image 全屏预览。 -->
@@ -74,8 +76,13 @@
               fit="contain"
               :preview-src-list="embedded ? [msg.url] : []"
               @click="openStageImage(msg.id)" />
-            <!-- ACT: 附件卡片：m.file 渲染为可下载卡片（blob 已经鉴权媒体解析），点击按原文件名落盘。 -->
-            <button v-else-if="msg.msgtype === 'm.file' && msg.url" type="button" class="fileCard" :title="translate('下载')" @click="downloadFile(msg)">
+            <!-- ACT: 附件卡片：可文本预览的（txt/json/md/html/源码等）点击进主面板阅读；其余仍按原文件名下载。 -->
+            <button
+              v-else-if="msg.msgtype === 'm.file' && msg.url"
+              type="button"
+              class="fileCard"
+              :title="filePreviewable(msg) ? translate('预览') : translate('下载')"
+              @click="onFileCard(msg)">
               <span class="fileCardIcon" :style="{ '--tool-icon': `url(&quot;${iconFileUpload}&quot;)` }" aria-hidden="true" />
               <span class="fileCardName">{{ msg.body || translate("文件") }}</span>
             </button>
@@ -97,12 +104,17 @@
       <span v-if="typingNames.length">{{ typingNames.join("、") }} 正在输入…</span>
     </div>
 
-    <!-- ACT: 微信式右键菜单：首项按消息类型变化（视频→播放 / 图片→查看 / 文本→复制），其后恒为「引用」。 -->
+    <!-- ACT: 微信式右键菜单：首项按消息类型变化（视频→播放 / 图片→查看 / 文本→复制 / 附件→查看），
+         其后恒为「引用」；视频/图片/附件再加「下载」；自己的消息最后可「删除」。 -->
     <div v-if="quoteMenu" class="quoteMenu" :style="{ left: `${quoteMenu.x}px`, top: `${quoteMenu.y}px` }" role="menu">
       <button v-if="!embedded && quoteMenu.msg.msgtype === 'm.video' && quoteMenu.msg.url" type="button" role="menuitem" @click="playFromMenu">{{ translate("播放") }}</button>
       <button v-else-if="!embedded && quoteMenu.msg.msgtype === 'm.image' && quoteMenu.msg.url" type="button" role="menuitem" @click="viewFromMenu">{{ translate("查看") }}</button>
       <button v-else-if="quoteMenu.msg.msgtype === 'm.text'" type="button" role="menuitem" @click="copyFromMenu">{{ translate("复制") }}</button>
+      <!-- ACT: 附件「查看」：可文本预览的进主面板阅读，其余直接落盘；工作室（embedded）无主面板不展示。 -->
+      <button v-else-if="!embedded && quoteMenu.msg.msgtype === 'm.file' && quoteMenu.msg.url" type="button" role="menuitem" @click="previewFromMenu">{{ translate("查看") }}</button>
       <button type="button" role="menuitem" @click="applyQuote">{{ translate("引用") }}</button>
+      <!-- ACT: 视频/图片/附件都能另存到本地磁盘。 -->
+      <button v-if="isDownloadable(quoteMenu.msg)" type="button" role="menuitem" @click="downloadFromMenu">{{ translate("下载") }}</button>
       <!-- ACT: 仅自己的消息可删（Matrix redaction）；危险操作红字展示。 -->
       <button v-if="quoteMenu.msg.mine" type="button" role="menuitem" class="danger" @click="deleteFromMenu">{{ translate("删除") }}</button>
     </div>
@@ -209,7 +221,7 @@ import { translate } from "@toonflow/i18n/vue";
 // ACT: 工具按钮图标统一取自 src/icons（CSS mask + currentColor 着色，与全局外壳一致）。
 import iconUserGroup from "@/icons/user_group.svg";
 import iconFileUpload from "@/icons/file_upload.svg";
-import iconMovieFilm from "@/icons/movie_film.svg";
+import { previewKind } from "@/utils/textPreview";
 import { useAuthStore } from "@/stores/auth";
 import { useMatrixChat, type ChatMessage } from "@/composables/useMatrixChat";
 
@@ -230,10 +242,10 @@ const emit = defineEmits<{
   (event: "select-video", id: string): void;
   // ACT: 右键菜单「播放」：页面把该视频载入左栏视频舞台并自动起播。
   (event: "play-video", id: string): void;
-  // ACT: 右键菜单「查看」：页面在右栏图片查看器里展示该图片。
-  (event: "view-image", id: string): void;
-  // ACT: 点击时间线图片：页面把该图片载入主面板（与视频播放器同位）展示。
+  // ACT: 点击时间线图片 / 右键「查看」：页面把该图片载入主面板（与视频播放器同位）展示。
   (event: "stage-image", id: string): void;
+  // ACT: 点击可文本预览的附件：页面在主面板只读展示文件内容（缩放调字号）。
+  (event: "stage-file", id: string): void;
 }>();
 
 const route = useRoute();
@@ -312,9 +324,9 @@ function closeQuoteMenu() { quoteMenu.value = null; }
 function onQuoteMenuKey(event: KeyboardEvent) { if (event.key === "Escape") quoteMenu.value = null; }
 
 function openQuoteMenu(event: MouseEvent, msg: ChatMessage) {
-  // ACT: 菜单约 96×96（最多三项：类型项/引用/删除）：贴右键位置弹出，靠边时收回视口内。
+  // ACT: 菜单最多四项（类型项/引用/下载/删除，约 128px 高）：贴右键位置弹出，靠边时收回视口内。
   const x = Math.max(8, Math.min(event.clientX, window.innerWidth - 104));
-  const y = Math.max(8, Math.min(event.clientY, window.innerHeight - 104));
+  const y = Math.max(8, Math.min(event.clientY, window.innerHeight - 136));
   quoteMenu.value = { x, y, msg };
 }
 
@@ -334,12 +346,12 @@ function playFromMenu() {
   emit("play-video", msg.id);
 }
 
-// ACT: 右键菜单「查看」：把图片消息 id 交给页面，由右栏查看器展示。
+// ACT: 右键菜单「查看」（图片）：与左键点击时间线图片一致，都交主面板（与视频播放器同位）展示。
 function viewFromMenu() {
   const msg = quoteMenu.value?.msg;
   quoteMenu.value = null;
   if (!msg) return;
-  emit("view-image", msg.id);
+  emit("stage-image", msg.id);
 }
 
 // ACT: 点击时间线图片：群聊页交主面板（与视频播放器同位）展示；工作室（embedded）无主面板，
@@ -347,6 +359,36 @@ function viewFromMenu() {
 function openStageImage(id: string) {
   if (props.embedded) return;
   emit("stage-image", id);
+}
+
+// ACT: 附件是否可进主面板文本预览：按文件名+MIME 判别；工作室无主面板一律不可。
+function filePreviewable(msg: ChatMessage) {
+  return !props.embedded && previewKind(msg.body || "", msg.mimetype) !== null;
+}
+
+function onFileCard(msg: ChatMessage) {
+  if (filePreviewable(msg)) emit("stage-file", msg.id);
+  else downloadFile(msg);
+}
+
+// ACT: 右键菜单「下载」：视频/图片/附件都能按原文件名落盘。
+function isDownloadable(msg: ChatMessage) {
+  return (msg.msgtype === "m.video" || msg.msgtype === "m.image" || msg.msgtype === "m.file") && !!msg.url;
+}
+
+// ACT: 右键菜单「查看」（附件）：复用卡片点击链路，可预览的进主面板阅读，其余直接下载。
+function previewFromMenu() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  onFileCard(msg);
+}
+
+function downloadFromMenu() {
+  const msg = quoteMenu.value?.msg;
+  quoteMenu.value = null;
+  if (!msg) return;
+  downloadFile(msg);
 }
 
 // ACT: 右键菜单「复制」：文本正文进系统剪贴板，可粘贴到输入框或任何地方。
@@ -714,8 +756,8 @@ void props;
       border-radius: calc(var(--ui-radius) * 0.75);
       margin-bottom: 4px;
 
-      // ACT: 可点进主面板的图片：放大镜光标提示可点击。
-      &.clickable { cursor: zoom-in; }
+      // ACT: 可点进主面板的图片：手指光标，与视频卡片、文本消息一致。
+      &.clickable { cursor: pointer; }
     }
 
     // ACT: 微信式引用条：灰底、左竖线、最多两行截断；点击跳回被引用消息。
@@ -764,20 +806,15 @@ void props;
       }
     }
 
-    .videoCardIcon {
+    .videoCardThumb {
       display: block;
       flex-shrink: 0;
-      width: 20px;
-      height: 20px;
-      background-color: currentColor;
-      mask-image: var(--tool-icon);
-      mask-repeat: no-repeat;
-      mask-position: center;
-      mask-size: contain;
-      -webkit-mask-image: var(--tool-icon);
-      -webkit-mask-repeat: no-repeat;
-      -webkit-mask-position: center;
-      -webkit-mask-size: contain;
+      width: 56px;
+      height: 42px;
+      border-radius: 6px;
+      background: var(--el-fill-color);
+      object-fit: cover;
+      pointer-events: none;
     }
 
     .videoCardName {

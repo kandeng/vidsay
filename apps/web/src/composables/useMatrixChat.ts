@@ -21,6 +21,11 @@ export type ChatMessage = {
   msgtype: string; // m.text / m.image / m.video / ...
   body: string;
   url: string; // 媒体消息解析出的可播放 blob 地址；文本消息为空串
+  // ACT: 视频封面（info.thumbnail_url 鉴权媒体解析后）；无缩略图为空串，卡片端回退首帧。
+  thumb: string;
+  // ACT: 附件 MIME 与字节数（info.mimetype / info.size）：主面板文本预览按 MIME+文件名判别渲染形态。
+  mimetype: string;
+  size: number;
   ts: number;
   mine: boolean;
   // ACT: 引用回复（m.relates_to.m.in_reply_to）：被回复消息的发送者与正文摘要，
@@ -204,6 +209,10 @@ function refreshTimeline() {
     const mxc = typeof content.url === "string" && content.url.startsWith("mxc://") ? content.url : "";
     // ACT: 媒体消息异步解析成 blob URL（鉴权媒体）；解析完成后会再次刷新时间线。
     if (mxc && !mediaCache.has(mxc)) resolveMedia(mxc);
+    // ACT: 视频缩略图同属鉴权媒体：有则解析，卡片优先用它做封面。
+    const info = (content.info ?? {}) as { thumbnail_url?: unknown; mimetype?: unknown; size?: unknown };
+    const thumbMxc = typeof info.thumbnail_url === "string" && info.thumbnail_url.startsWith("mxc://") ? info.thumbnail_url : "";
+    if (thumbMxc && !mediaCache.has(thumbMxc)) resolveMedia(thumbMxc);
     const member = room.getMember(senderId);
     // ACT: 头像同属鉴权媒体：mxc -> blob；解析完成的回调会再刷一次时间线把头像填上。
     const avatarMxc = member?.getMxcAvatarUrl() ?? "";
@@ -216,6 +225,9 @@ function refreshTimeline() {
       msgtype,
       body: typeof content.body === "string" ? content.body : "",
       url: cachedMediaUrl(mxc),
+      thumb: cachedMediaUrl(thumbMxc),
+      mimetype: typeof info.mimetype === "string" ? info.mimetype : "",
+      size: typeof info.size === "number" ? info.size : 0,
       ts: ev.getTs(),
       mine: senderId === me,
       quote: resolveQuote(room, content),

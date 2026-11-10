@@ -38,7 +38,6 @@
     "apps/web/src/components/settings/tfRechargeDialog.vue",
     "apps/web/src/components/modelPopover.vue",
     "apps/web/src/components/loginDialog.vue",
-    "apps/web/src/pages/chat/components/imageViewer.vue",
     "apps/web/src/pages/workspace/panels/document/components/editorTab.vue",
     "apps/web/src/pages/workspace/panels/document/components/workspaceSearch.vue"
   ],
@@ -289,6 +288,7 @@
   "文件": [
     "apps/web/src/components/agent/mentionMenu.vue",
     "apps/web/src/components/groupChat.vue",
+    "apps/web/src/pages/chat/index.vue",
     "apps/web/src/pages/workspace/panels/document/components/fileTree.vue",
     "apps/web/src/pages/workspace/panels/canvas/components/assetBrowser.vue"
   ],
@@ -3540,6 +3540,7 @@
   ],
   "预览": [
     "apps/web/src/components/settings/panels/ui.vue",
+    "apps/web/src/components/groupChat.vue",
     "apps/web/src/lib/i18n.ts"
   ],
   "恢复界面默认设置": [
@@ -4327,6 +4328,12 @@
   "滑动定位": [
     "apps/web/src/pages/chat/components/videoStage.vue"
   ],
+  "缩小字号": [
+    "apps/web/src/pages/chat/components/videoStage.vue"
+  ],
+  "放大字号": [
+    "apps/web/src/pages/chat/components/videoStage.vue"
+  ],
   "墨色": [
     "apps/web/src/pages/chat/components/videoStage.vue"
   ],
@@ -4343,6 +4350,12 @@
     "apps/web/src/pages/chat/components/videoStage.vue"
   ],
   "登录后即可参与群聊": [
+    "apps/web/src/pages/chat/index.vue"
+  ],
+  "文件较大，无法预览，请下载后查看": [
+    "apps/web/src/pages/chat/index.vue"
+  ],
+  "读取文件失败，请稍后重试": [
     "apps/web/src/pages/chat/index.vue"
   ],
   "所选扩展未启用或不支持此文件类型": [

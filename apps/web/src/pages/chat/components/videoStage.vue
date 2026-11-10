@@ -9,6 +9,11 @@ import iconVideoPause from "@/icons/video_pause.svg";
 // ACT: 图片模式控制条的缩小/放大字形：用户指定的 iconfont 实心 SVG，同样走 mask + currentColor。
 import iconZoomOut from "@/icons/zoom_out.svg";
 import iconZoomIn from "@/icons/zoom_in.svg";
+// ACT: Markdown 渲染复用仓内既有组合（marked 解析 + DOMPurify 白名单净化），与 packages/ext/md 同源。
+import DOMPurify from "dompurify";
+import { marked } from "marked";
+// ACT: 文本模式截图：html2canvas-pro 把阅读面按所见即所得光栅化（仓内 director3dNode 同款依赖）。
+import html2canvas from "html2canvas-pro";
 // ACT: 无视频空态插画改用胶片图标：经 mask + 分隔线同色渲染，宽度仍为 el-empty 默认 160px。
 import iconEmptyFilm from "@/icons/canvas_film.svg";
 
@@ -17,7 +22,7 @@ import iconEmptyFilm from "@/icons/canvas_film.svg";
 // 面板缩放不丢笔迹；截图时把视频帧与画笔层合成一张 PNG（同源 blob 不污染 canvas）。
 export type StageVideo = { id: string; url: string; name: string };
 
-const props = defineProps<{ items: StageVideo[]; modelValue: string; playToken?: number; image?: { url: string; name: string } | null }>();
+const props = defineProps<{ items: StageVideo[]; modelValue: string; playToken?: number; image?: { url: string; name: string } | null; text?: { name: string; content: string; kind: "text" | "json" | "markdown" | "html" } | null }>();
 const emit = defineEmits<{ "update:modelValue": [id: string] }>();
 
 const { ready, activeRoomId, sendImage } = useMatrixChat();
@@ -107,12 +112,39 @@ const imageAspect = ref(16 / 9);
 const baseScale = ref(1);
 const zoomMin = computed(() => baseScale.value * ZOOM_MIN);
 const zoomMax = computed(() => baseScale.value * ZOOM_MAX);
+// ACT: 文本模式字号缩放范围（图片模式仍走基准比例界限）：14px 的 0.5–4 倍。
+const TEXT_ZOOM_MIN = 0.5;
+const TEXT_ZOOM_MAX = 4;
 let panFrom = { x: 0, y: 0, ox: 0, oy: 0 };
 
-// ACT: 盒子宽高比：图片模式跟随图片原生比例（加载后回填），视频模式仍跟视频，空态不锁比例。
+// ACT: 盒子宽高比：图片模式跟随图片原生比例（加载后回填），视频模式仍跟视频，空态/文本态不锁比例。
 const boxStyle = computed(() => {
+  if (props.text) return null;
   if (props.image) return { aspectRatio: `${imageAspect.value}` };
   return current.value ? { aspectRatio: `${aspect.value}` } : null;
+});
+
+// ACT: Markdown 走 marked(gfm) + DOMPurify 白名单净化：禁 style/form，上传文档不能污染主页或夹带脚本。
+const markdownHtml = computed(() => {
+  if (!props.text || props.text.kind !== "markdown") return "";
+  const raw = marked.parse(props.text.content, { async: false, gfm: true }) as string;
+  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "form"] }) as string;
+});
+
+// ACT: JSON 能解析则两空格缩进重排便于阅读；解析失败回退原文（不臆造）。
+const jsonText = computed(() => {
+  if (!props.text || props.text.kind !== "json") return "";
+  try {
+    return JSON.stringify(JSON.parse(props.text.content), null, 2);
+  } catch {
+    return props.text.content;
+  }
+});
+
+// ACT: HTML 形态：sandbox 空属性 iframe（禁脚本、禁同源）隔离渲染，并注入当前字号；主页面不受上传文档影响。
+const htmlDoc = computed(() => {
+  if (!props.text || props.text.kind !== "html") return "";
+  return `<!doctype html><html><head><meta charset="utf-8"><style>html{font-size:${14 * zoom.value}px}</style></head><body>${props.text.content}</body></html>`;
 });
 
 function onImageLoad(event: Event) {
@@ -149,7 +181,9 @@ function clampPan() {
 }
 
 function zoomBy(factor: number) {
-  zoom.value = Math.min(zoomMax.value, Math.max(zoomMin.value, zoom.value * factor));
+  const min = props.text ? TEXT_ZOOM_MIN : zoomMin.value;
+  const max = props.text ? TEXT_ZOOM_MAX : zoomMax.value;
+  zoom.value = Math.min(max, Math.max(min, zoom.value * factor));
   if (zoom.value <= 1) { panX.value = 0; panY.value = 0; }
   else clampPan();
 }
@@ -181,6 +215,15 @@ watch(() => props.image, img => {
   void nextTick(sizeInk);
 });
 
+// ACT: 换文件/收回文件重置字号缩放并清笔迹（标记属于当前展示内容）。
+watch(() => props.text, () => {
+  zoom.value = 1;
+  panX.value = 0;
+  panY.value = 0;
+  panning.value = false;
+  clearMarks();
+});
+
 // ── 画笔层（移植自 MeshViewer 的 ink 层）──
 type Mark = {
   kind: "arrow" | "rect" | "curve" | "text";
@@ -207,6 +250,7 @@ const GLYPHS = {
 
 const boxRef = ref<HTMLElement>();
 const imageEl = ref<HTMLImageElement>();
+const textRef = ref<HTMLElement>();
 const inkRef = ref<HTMLCanvasElement>();
 const textInput = ref<HTMLInputElement>();
 const tool = ref<"" | "arrow" | "rect" | "curve" | "text">("");
@@ -216,6 +260,14 @@ const marks = ref<Mark[]>([]);
 let draft: Mark | null = null;
 const textAt = ref<{ x: number; y: number } | null>(null);
 const textDraft = ref("");
+// ACT: 文字笔字号：预设档位步进；草稿输入框与落笔墨迹共用同一字号，所见即所得。
+const TEXT_PX_STEPS = [12, 14, 16, 20, 24, 32, 40, 56];
+const textPx = ref(14);
+function stepTextPx(delta: number) {
+  const index = TEXT_PX_STEPS.indexOf(textPx.value);
+  const next = Math.min(TEXT_PX_STEPS.length - 1, Math.max(0, (index < 0 ? 1 : index) + delta));
+  textPx.value = TEXT_PX_STEPS[next];
+}
 
 function sizeInk() {
   const canvas = inkRef.value;
@@ -331,7 +383,7 @@ function commitText() {
   textDraft.value = "";
   if (!at || !text || !inkRef.value) return;
   const rect = inkRef.value.getBoundingClientRect();
-  marks.value = [...marks.value, { kind: "text", x: at.x / rect.width, y: at.y / rect.height, text, px: 14, color: inkColor.value }];
+  marks.value = [...marks.value, { kind: "text", x: at.x / rect.width, y: at.y / rect.height, text, px: textPx.value, color: inkColor.value }];
   redrawInk();
 }
 
@@ -365,8 +417,27 @@ function clearMarks() {
 // ── 截图：视频帧 + 画笔层合成 PNG ──
 const busy = ref(false);
 
+// ACT: 文本模式可截图性：HTML 形态是 sandbox iframe，html2canvas 拿不到 iframe 内容，截图/下载禁用；其余形态所见即所得。
+const textCapturable = computed(() => !!props.text && props.text.kind !== "html");
+
 async function capture(): Promise<{ blob: Blob; width: number; height: number } | null> {
   const ink = inkRef.value;
+  // ACT: 文本模式截图：光栅化阅读面（含当前滚动窗口与字号），再把屏幕空间笔层 1:1 合上。
+  if (props.text) {
+    const node = textRef.value;
+    if (!node || !textCapturable.value) return null;
+    const canvas = await html2canvas(node, {
+      backgroundColor: getComputedStyle(node).backgroundColor,
+      scale: window.devicePixelRatio || 1,
+      logging: false,
+    });
+    if (ink && marks.value.length) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(ink, 0, 0, ink.width, ink.height, 0, 0, canvas.width, canvas.height);
+    }
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
+    return blob ? { blob, width: canvas.width, height: canvas.height } : null;
+  }
   // ACT: 图片模式截图：按图片原生尺寸导出，笔层按当前缩放/平移反投影合成（屏幕空间笔迹映回原图画布）。
   const imgEl = imageEl.value;
   if (imgEl && props.image && imgEl.naturalWidth && imgEl.naturalHeight) {
@@ -467,7 +538,7 @@ onBeforeUnmount(() => {
     <div class="stageBoxWrap">
       <!-- ACT: 盒子按视频原生宽高比撑开（object-fit 无需 letterbox），画笔层与视频内容完全重合。 -->
       <!-- ACT: 无视频时不锁宽高比：占位盒高度随空态内容撑开，胶片图与文案完整可见不被裁切。 -->
-      <div ref="boxRef" class="stageBox" :class="{ empty: !current && !image, imageMode: !!image }" :style="boxStyle">
+      <div ref="boxRef" class="stageBox" :class="{ empty: !current && !image && !text, imageMode: !!image, textMode: !!text }" :style="boxStyle">
         <!-- ACT: 图片模式：与视频同盒同位；transform 先平移后缩放，zoom>1 时指针拖拽平移。 -->
         <img
           v-if="image"
@@ -482,6 +553,12 @@ onBeforeUnmount(() => {
           @pointermove="panMove"
           @pointerup="panUp"
           @pointercancel="panUp" />
+        <!-- ACT: 文本模式：只读展示附件内容（纯文本/JSON/Markdown/HTML），字号随 zoom 缩放，不提供编辑入口。 -->
+        <div v-else-if="text" ref="textRef" class="stageText" :class="{ framed: text.kind === 'html' }" :style="{ fontSize: `${14 * zoom}px` }">
+          <iframe v-if="text.kind === 'html'" class="htmlFrame" sandbox="" :srcdoc="htmlDoc" :title="text.name"></iframe>
+          <div v-else-if="text.kind === 'markdown'" class="markdownBody" v-html="markdownHtml"></div>
+          <pre v-else class="textContent">{{ text.kind === 'json' ? jsonText : text.content }}</pre>
+        </div>
         <video
           v-else-if="current"
           ref="videoRef"
@@ -510,7 +587,7 @@ onBeforeUnmount(() => {
           ref="textInput"
           v-model="textDraft"
           class="inkText"
-          :style="{ left: `${textAt.x}px`, top: `${textAt.y}px`, color: inkColor }"
+          :style="{ left: `${textAt.x}px`, top: `${textAt.y}px`, color: inkColor, fontSize: `${textPx}px` }"
           :placeholder="translate('输入文字，Enter 落笔，Esc 取消')"
           @keydown.enter.prevent="commitText"
           @keydown.escape.prevent="textAt = null"
@@ -519,12 +596,12 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- ACT: 控制条：图片模式只留缩小/放大（替换播放/暂停、滑杆与时间盒）且居中；视频模式保持原三件套。 -->
-    <div class="stageControls" :class="{ centered: !!image }">
-      <template v-if="image">
+    <div class="stageControls" :class="{ centered: !!image || !!text }">
+      <template v-if="image || text">
         <button
           class="ctlButton"
           type="button"
-          :disabled="zoom <= zoomMin"
+          :disabled="text ? zoom <= TEXT_ZOOM_MIN : zoom <= zoomMin"
           :aria-label="translate('缩小')"
           :title="translate('缩小')"
           @click="zoomBy(1 / ZOOM_STEP)">
@@ -533,7 +610,7 @@ onBeforeUnmount(() => {
         <button
           class="ctlButton"
           type="button"
-          :disabled="zoom >= zoomMax"
+          :disabled="text ? zoom >= TEXT_ZOOM_MAX : zoom >= zoomMax"
           :aria-label="translate('放大')"
           :title="translate('放大')"
           @click="zoomBy(ZOOM_STEP)">
@@ -566,7 +643,7 @@ onBeforeUnmount(() => {
       </template>
     </div>
 
-    <!-- ACT: 画笔工具箱：四支笔 + 墨色 + 清除/放下 + 截图发送/下载；图片模式保留在缩放键下方一行。 -->
+    <!-- ACT: 画笔工具箱：四支笔 + 墨色 + 清除/放下 + 截图发送/下载；三种模式都在底行第二行居中展示。 -->
     <div class="pens">
       <button
         v-for="item in TOOLS"
@@ -581,6 +658,33 @@ onBeforeUnmount(() => {
           <path v-for="(path, index) in item.paths" :key="index" :d="path" />
         </svg>
       </button>
+      <!-- ACT: 字号步进器：仅持文字笔时展示；减/加在预设档位间移动，中间标签显示当前像素值。 -->
+      <span v-if="tool === 'text'" class="pxGroup">
+        <button
+          type="button"
+          class="penButton"
+          :disabled="textPx <= TEXT_PX_STEPS[0]"
+          :title="translate('缩小字号')"
+          :aria-label="translate('缩小字号')"
+          @click="stepTextPx(-1)">
+          <svg class="pic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 10h10" />
+          </svg>
+        </button>
+        <span class="pxLabel">{{ textPx }}px</span>
+        <button
+          type="button"
+          class="penButton"
+          :disabled="textPx >= TEXT_PX_STEPS[TEXT_PX_STEPS.length - 1]"
+          :title="translate('放大字号')"
+          :aria-label="translate('放大字号')"
+          @click="stepTextPx(1)">
+          <svg class="pic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 10h10" />
+            <path d="M10 5v10" />
+          </svg>
+        </button>
+      </span>
       <input v-model="inkColor" type="color" :title="translate('墨色')" :aria-label="translate('墨色')" />
       <span class="sep" aria-hidden="true" />
       <button
@@ -610,7 +714,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="penButton"
-        :disabled="(!current && !image) || busy || !ready || !activeRoomId"
+        :disabled="(!current && !image && !textCapturable) || busy || !ready || !activeRoomId"
         :title="translate('截图并发送到群聊')"
         :aria-label="translate('截图并发送到群聊')"
         @click="screenshot">
@@ -621,7 +725,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="penButton"
-        :disabled="!current && !image"
+        :disabled="!current && !image && !textCapturable"
         :title="translate('下载截图')"
         :aria-label="translate('下载截图')"
         @click="download">
@@ -676,6 +780,13 @@ onBeforeUnmount(() => {
     background: transparent;
   }
 
+  // ACT: 文本模式阅读面：撑满可用区域、实底遮住点阵、内部滚动；同样不画黑底与边框。
+  &.textMode {
+    width: 100%;
+    height: 100%;
+    background: var(--el-bg-color);
+  }
+
   :deep(.el-empty) { padding: 24px 0; }
 
   // ACT: 胶片空态图字形：mask + currentColor 同款技法，颜色取竖直分隔线同色 --el-border-color；
@@ -716,6 +827,50 @@ onBeforeUnmount(() => {
     &.panning { cursor: grabbing; }
   }
 
+  // ACT: 文本容器：内滚 + 内边距；HTML 形态由 iframe 自滚，去掉内边距贴边。
+  .stageText {
+    width: 100%;
+    height: 100%;
+    padding: 16px 20px;
+    overflow: auto;
+
+    &.framed { padding: 0; }
+  }
+
+  .textContent {
+    margin: 0;
+    font-family: ui-monospace, monospace;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  .htmlFrame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+  }
+
+  // ACT: Markdown 排版：标题/代码块/引用/表格/链接取主题变量，字号继承容器（随缩放）。
+  .markdownBody {
+    line-height: 1.7;
+    overflow-wrap: break-word;
+
+    :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) { margin: 12px 0 8px; font-weight: 600; }
+    :deep(h1) { font-size: 1.6em; }
+    :deep(h2) { font-size: 1.4em; }
+    :deep(h3) { font-size: 1.2em; }
+    :deep(pre) { padding: 10px 12px; border-radius: 8px; background: var(--el-fill-color-light); overflow: auto; }
+    :deep(code) { font-family: ui-monospace, monospace; font-size: 0.9em; }
+    :deep(blockquote) { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--el-border-color); color: var(--el-text-color-regular); }
+    :deep(table) { border-collapse: collapse; }
+    :deep(th), :deep(td) { padding: 4px 10px; border: 1px solid var(--el-border-color); }
+    :deep(a) { color: var(--el-color-primary); }
+    :deep(img) { max-width: 100%; }
+  }
+
   .ink {
     position: absolute;
     inset: 0;
@@ -729,7 +884,8 @@ onBeforeUnmount(() => {
     border: 1px dashed currentColor;
     border-radius: 4px;
     background: color-mix(in srgb, var(--el-bg-color) 82%, transparent);
-    font: 14px ui-monospace, monospace;
+    // ACT: 字号由内联样式按 textPx 注入，这里只定字体族。
+    font-family: ui-monospace, monospace;
     outline: none;
   }
 }
@@ -844,8 +1000,24 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 0 16px 14px;
+
+  // ACT: 字号步进器：与笔按钮同高的紧凑三段（减/标签/加），仅持文字笔时挂载。
+  .pxGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+
+    .pxLabel {
+      min-width: 42px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--el-text-color-regular);
+      font-variant-numeric: tabular-nums;
+    }
+  }
 
   .penButton {
     display: flex;
