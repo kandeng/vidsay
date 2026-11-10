@@ -60,7 +60,6 @@
               <!-- ACT: 封面图：优先消息自带缩略图（info.thumbnail_url）；没有时用 <video #t=0.1> 取首帧当默认封面。 -->
               <img v-if="msg.thumb" class="videoCardThumb" :src="msg.thumb" :alt="msg.body || translate('视频')" />
               <video v-else class="videoCardThumb" :src="`${msg.url}#t=0.1`" preload="metadata" muted playsinline tabindex="-1" aria-hidden="true" />
-              <span class="videoCardName">{{ msg.body || translate("视频") }}</span>
             </button>
             <!-- ACT: 点击图片交主面板（与视频播放器同位）展示；工作室无主面板，保留 el-image 全屏预览。 -->
             <el-image
@@ -912,44 +911,36 @@ void props;
       }
     }
 
+    // ACT: 视频卡片与图片消息同形：封面按原始比例撑到气泡宽（上限气泡宽），右侧不再放文件名；
+    // 文件名只保留卡片下方文本行；舞台上选中时用主色外轮廓提示。
     .videoCard {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      padding: 8px 10px;
+      display: block;
+      width: fit-content;
+      max-width: 100%;
+      padding: 0;
       margin-bottom: 4px;
-      border: 1px solid var(--el-border-color);
+      border: none;
       border-radius: calc(var(--ui-radius) * 0.75);
       background: transparent;
       color: inherit;
       cursor: pointer;
       text-align: start;
-      transition: border-color 0.15s ease, background 0.15s ease;
 
-      &:hover { background: var(--el-fill-color); }
+      &:hover .videoCardThumb { opacity: 0.92; }
       &.active {
-        border-color: var(--el-color-primary);
-        background: var(--el-color-primary-light-9);
+        outline: 2px solid var(--el-color-primary);
+        outline-offset: 2px;
       }
     }
 
     .videoCardThumb {
       display: block;
-      flex-shrink: 0;
-      width: 56px;
-      height: 42px;
-      border-radius: 6px;
+      max-width: 100%;
+      height: auto;
+      border-radius: calc(var(--ui-radius) * 0.75);
       background: var(--el-fill-color);
       object-fit: cover;
       pointer-events: none;
-    }
-
-    .videoCardName {
-      overflow: hidden;
-      font-size: 13px;
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
 
     // ACT: 附件卡片：与视频卡片同形的通栏边框行；点击按原文件名下载。
